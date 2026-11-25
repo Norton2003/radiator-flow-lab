@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radiator Flow Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE work: an engineering tool for a race team, precise but fun to play with
+   IDEA a CFD post-processing workstation: dark viewport, thermal color maps, a lab bench of instruments
+   PICTURE the live 3D radiator with air and coolant particles, then a live lattice-Boltzmann louver flow field
+   COLOUR graphite night ground, aluminum greys, thermal ramp blue to red, one scarlet accent for what matters
+   TYPE Archivo for titles and big figures, Inter for text and numbers
+   LAYOUT laptop: viewport two-thirds left, results and controls right; phone: title, viewport, sticky result bar, controls */
+:root{color-scheme:dark;--bg:#0b0e13;--panel:#12171f;--panel2:#171e28;--line:#243040;--ink:#e9eef4;--mute:#93a1b3;--dim:#64748a;--acc:#ef2b36;--cold:#3fa7d6;--hot:#f39a3b;--ok:#3ccf91}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:16px/1.55 Inter,system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:clip;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:Archivo,Inter,sans-serif;letter-spacing:-.02em;line-height:1.05;margin:0;text-wrap:balance}
+h1{font-size:clamp(28px,3.4vw,46px);font-weight:800}
+h2{font-size:clamp(24px,2.6vw,34px);font-weight:800}
+h3{font-size:18px;font-weight:700;letter-spacing:-.01em}
+p{margin:0}
+a{color:#8fc8ff}
+.band{padding:clamp(22px,3.2vw,48px) max(4vw,16px)}
+.wrap{max-width:1320px;margin:0 auto}
+.top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;padding:14px max(4vw,16px);border-bottom:1px solid var(--line);background:#0d1118}
+.brand{display:flex;gap:10px;align-items:center;font:700 16px Archivo,sans-serif}
+.brand i{width:26px;height:26px;border-radius:6px;background:repeating-linear-gradient(90deg,#c9d1da 0 2px,#5d6876 2px 4px);box-shadow:inset 0 0 0 2px #0d1118,0 0 0 1px #3a4656;display:block}
+.chip{font-size:13px;color:var(--mute);border:1px solid var(--line);border-radius:99px;padding:5px 11px;white-space:nowrap}
+.seg{display:inline-flex;background:#0b0f15;border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{font:600 14px Inter,sans-serif;color:var(--mute);background:none;border:0;border-radius:7px;padding:0 12px;min-height:36px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--panel2);color:var(--ink);box-shadow:inset 0 0 0 1px #33425a}
+.seg button:hover{color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #8fc8ff;outline-offset:2px}
+.hero{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);gap:20px;align-items:stretch}
+.headline{display:grid;gap:10px;margin-bottom:18px}
+.headline p{color:var(--mute);max-width:70ch}
+.headline b{color:var(--ink);font-weight:600}
+.view{position:relative;border-radius:16px;overflow:hidden;background:radial-gradient(120% 90% at 50% 20%,#18212d,#0b0e13 70%);border:1px solid var(--line);min-height:520px}
+.view canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+.view canvas:active{cursor:grabbing}
+.vbar{z-index:2;position:absolute;left:12px;right:12px;top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;pointer-events:none}
+.vbar>*{pointer-events:auto}
+.legend{z-index:2;position:absolute;left:14px;bottom:14px;right:14px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;pointer-events:none;flex-wrap:wrap}
+.cbar{display:grid;gap:4px;font-size:13px;color:var(--mute);width:min(300px,60%)}
+.cbar .g{height:9px;border-radius:5px;background:linear-gradient(90deg,#1c3a9e,#2994db,#8ce0d1,#fae073,#f58c33,#db2133)}
+.cbar .ends{display:flex;justify-content:space-between;white-space:nowrap}
+.hint{font-size:13px;color:var(--dim);text-align:right}
+.lbl{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;transition:opacity .25s}
+.lbl::before{content:"";position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:#e9eef4;box-shadow:0 0 0 3px rgba(233,238,244,.22)}
+.lbl::after{content:"";position:absolute;left:0;top:-38px;width:1px;height:34px;background:linear-gradient(rgba(233,238,244,.7),rgba(233,238,244,.15))}
+.lbl span{position:absolute;bottom:38px;left:0;transform:translateX(-50%);font-size:13px;line-height:1.25;white-space:nowrap;background:rgba(11,14,19,.82);border:1px solid #33425a;border-radius:8px;padding:6px 10px;backdrop-filter:blur(6px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.view::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 95% at 50% 45%,transparent 55%,rgba(5,7,10,.55));border-radius:16px}
+.lbl b{font-weight:600}
+#labels{position:absolute;inset:0;z-index:2;pointer-events:none}
+.lbl.hot b{color:#ff8f6b}.lbl.cold b{color:#7cc8f2}
+.side{display:grid;gap:14px;align-content:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.big{display:grid;gap:6px}
+.big .k{font-size:14px;color:var(--mute)}
+.big .v{font:800 clamp(44px,5vw,68px)/1 Archivo,sans-serif;letter-spacing:-.03em;white-space:nowrap}
+.big .v small{font-size:.42em;font-weight:700;color:var(--mute);margin-left:4px}
+.meter{height:12px;border-radius:7px;background:#0b0f15;border:1px solid var(--line);position:relative;overflow:hidden;margin-top:6px}
+.meter i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#2994db,#fae073 70%,#f58c33);border-radius:6px;transition:width .25s}
+.meter u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.status{font-size:14px;color:var(--mute)}
+.status b.good{color:var(--ok)}.status b.bad{color:#ff6a6f}
+.figs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.figs div{background:var(--panel);padding:10px 12px}
+.figs span{display:block;font-size:13px;color:var(--mute)}
+.figs em{display:block;font-style:normal;font-size:13px;font-weight:600;min-height:1em}.figs em.up{color:var(--ok)}.figs em.dn{color:#ff6a6f}
+.figs strong{font:700 20px Archivo,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tabs{display:flex;gap:2px;margin:-4px 0 14px;flex-wrap:wrap}
+.ctl{display:grid;gap:12px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 128px;gap:4px 10px;align-items:center}
+.row label{font-size:14px;color:var(--ink);font-weight:500}
+.row .sub{grid-column:1/-1;font-size:13px;color:var(--dim);margin-top:-2px}
+.num{display:flex;align-items:center;background:#0b0f15;border:1px solid #2e3b4e;border-radius:9px;padding:0 8px;height:40px}
+.num input{flex:1;width:0;background:none;border:0;color:var(--ink);font:500 16px Inter,sans-serif;font-variant-numeric:tabular-nums;text-align:right;padding:0;outline:none}
+.num em{font-style:normal;font-size:13px;color:var(--mute);margin-left:5px;white-space:nowrap}
+input[type=range]{grid-column:1/-1;-webkit-appearance:none;appearance:none;width:100%;height:28px;background:none;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--acc) var(--p,50%),#2a3545 var(--p,50%))}
+input[type=range]::-moz-range-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--acc) var(--p,50%),#2a3545 var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#f4f6f9;border:4px solid #0b0e13;box-shadow:0 0 0 1px #6b7a8e;margin-top:-8px}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#f4f6f9;border:4px solid #0b0e13;box-shadow:0 0 0 1px #6b7a8e}
+select{background:#0b0f15;color:var(--ink);border:1px solid #2e3b4e;border-radius:9px;height:40px;font:500 16px Inter,sans-serif;padding:0 8px;width:100%}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:40px}
+.sw{position:relative;width:50px;height:28px;border-radius:99px;background:#2a3545;border:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#f4f6f9;transition:transform .2s}
+.sw[aria-pressed=true]{background:var(--acc)}.sw[aria-pressed=true]::after{transform:translateX(22px)}
+.btn{font:600 14px Inter,sans-serif;color:var(--ink);background:var(--panel2);border:1px solid #33425a;border-radius:10px;min-height:40px;padding:0 14px;cursor:pointer}
+.btn:hover{border-color:#5a6d88}
+.presets{display:flex;gap:8px;flex-wrap:wrap}
+.lab{border-top:1px solid var(--line);background:linear-gradient(#0d1118,#0b0e13)}
+.labhead{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:end;margin-bottom:16px}
+.labhead p{color:var(--mute);max-width:68ch}
+.flow{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#06080b;touch-action:pan-y}
+.flow canvas{display:block;width:100%}
+.flowbar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-top:12px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.stats div{background:var(--panel);padding:12px 14px}
+.stats span{display:block;font-size:13px;color:var(--mute)}
+.stats strong{font:700 22px Archivo,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums}
+.regime{display:inline-block;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;margin-top:4px}
+.minictl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px}
+.fig{position:relative;min-height:260px}
+.grid2>.card{display:flex;flex-direction:column}.grid2>.card>.fig{flex:1}
+.fig>svg,.fig>canvas{position:absolute;inset:0;width:100%;height:100%}
+.card h3{margin-bottom:4px}
+.card .note{font-size:14px;color:var(--mute);margin-bottom:10px}
+svg text{font:13px Inter,sans-serif;fill:var(--mute);paint-order:stroke;stroke:var(--panel);stroke-width:4px}
+svg .ax{stroke:#2b3748;stroke-width:1}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th{font-weight:600;color:var(--mute);font-size:13px}
+.tgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.flags{display:grid;gap:8px;margin-top:8px}
+.flag{font-size:14px;padding:8px 12px;border-radius:10px;background:#1a1410;border:1px solid #4d3a22;color:#f3cf9a}
+.flag.okf{background:#0f1a15;border-color:#21483a;color:#8fe0bd}
+.method{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.method p,.method li{color:#c3cdd9;font-size:15px}
+.method ul{margin:6px 0 0;padding-left:18px}
+.eq{font:15px/1.5 "Cambria Math","STIX Two Math",Georgia,serif;color:var(--ink);background:#0b0f15;border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;overflow-x:auto;white-space:nowrap}
+footer{color:var(--dim);font-size:13px;border-top:1px solid var(--line)}
+.sticky{display:none}
+@media (min-width:1061px){.hero{grid-template-rows:clamp(600px,78vh,760px)}.side{display:flex;flex-direction:column;min-height:0}.side .card:last-child{flex:1;overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-color:#33425a transparent}}
+@media (max-width:1060px){.hero{grid-template-columns:minmax(0,1fr)}.view{min-height:440px}.side{grid-template-columns:repeat(2,minmax(0,1fr))}.labhead,.grid2{grid-template-columns:minmax(0,1fr)}.grid3{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:720px){.side{grid-template-columns:minmax(0,1fr)}.view{min-height:360px}.stats,.minictl{grid-template-columns:repeat(2,minmax(0,1fr))}.method,.tgrid{grid-template-columns:minmax(0,1fr)}
+ .sticky{display:flex;position:sticky;top:0;z-index:20;gap:12px;justify-content:space-between;align-items:center;background:rgba(11,14,19,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:8px 16px;font-size:14px}
+ .sticky strong{font:800 20px Archivo,sans-serif;white-space:nowrap}.hint{display:none}}
+@media (max-width:600px){.vbar .seg button{min-height:34px;font-size:13px;padding:0 10px}.lbl[data-k=lin],.lbl[data-k=lout],.lbl[data-k=lexh]{display:none}.view{min-height:420px}}
+@media (prefers-reduced-motion:reduce){.meter i{transition:none}}
+</style>
+</head>
+<body>
+<div class="sticky" id="sticky" aria-live="polite"><span>Heat rejected <strong id="sQ">–</strong></span><span>Coolant out <strong id="sT">–</strong></span></div>
+<header class="top">
+  <div class="brand"><i></i>Radiator Flow Lab</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <span class="chip" id="coreChip">9.25 × 4.5 × 2.0 in core</span>
+    <div class="seg" role="group" aria-label="Units"><button id="uSI" aria-pressed="true">SI</button><button id="uUS" aria-pressed="false">US</button></div>
+  </div>
+</header>
+
+<section class="band"><div class="wrap">
+  <div class="headline">
+    <h1 id="title">Radiator Flow Lab</h1>
+    <p id="lede">Move any slider or type a number. The 3D model, the air and coolant flow, the live louver simulation and every figure below update together.</p>
+  </div>
+  <div class="hero">
+    <div class="view" id="view">
+      <canvas id="gl" aria-label="3D radiator with animated air and coolant flow. Drag to rotate, scroll or pinch to zoom."></canvas>
+      <div id="labels">
+        <div class="lbl hot" data-k="lin"><span>Coolant in <b id="lIn">–</b></span></div>
+        <div class="lbl" data-k="lout"><span>Coolant out <b id="lOut">–</b></span></div>
+        <div class="lbl cold" data-k="lair"><span>Air in <b id="lAir">–</b> at <b id="lVel">–</b></span></div>
+        <div class="lbl hot" data-k="lexh"><span>Air out <b id="lExh">–</b></span></div>
+      </div>
+      <div class="vbar">
+        <div class="seg" role="group" aria-label="Render mode"><button id="vStudio" aria-pressed="false">Studio</button><button id="vThermal" aria-pressed="true">Thermal</button></div>
+        <div class="seg" role="group" aria-label="Overlays"><button id="vCut" aria-pressed="false">Cutaway</button><button id="vEx" aria-pressed="false">Explode</button><button id="vAir" aria-pressed="true">Airflow</button><button id="vSpin" aria-pressed="true">Spin</button></div>
+      </div>
+      <div class="legend">
+        <div class="cbar"><div class="g"></div><div class="ends"><span id="cLo">–</span><span>temperature</span><span id="cHi">–</span></div></div>
+        <div class="hint">Drag to orbit · scroll or pinch to zoom · double-click to reset<br>Airflow shown in slow motion (1/30×)</div>
+      </div>
+      <p id="noGL" hidden style="position:absolute;inset:auto 16px 50% 16px;text-align:center;color:var(--mute)">This browser has no WebGL2, so the 3D view is off. Everything else still works.</p>
+    </div>
+    <div class="side">
+      <div class="card">
+        <div class="big"><span class="k">Heat rejected to air</span><span class="v" id="bQ">–</span></div>
+        <div class="meter" aria-hidden="true"><i id="mQ"></i><u id="mL"></u></div>
+        <p class="status" id="stat" style="margin-top:8px">–</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button class="btn" id="pin">Pin as baseline</button><span id="pinNote" style="font-size:13px;color:var(--mute)">Pin a design, then change anything to compare.</span></div>
+        <div class="figs">
+          <div><span>Coolant out</span><strong id="fTc">–</strong><em id="fTcd"></em></div>
+          <div><span>Air out, mean</span><strong id="fTa">–</strong><em id="fTad"></em></div>
+          <div><span>Face velocity</span><strong id="fV">–</strong><em id="fVd"></em></div>
+          <div><span>Air-side ΔP</span><strong id="fdP">–</strong><em id="fdPd"></em></div>
+          <div><span>Effectiveness ε</span><strong id="fE">–</strong><em id="fEd"></em></div>
+          <div><span>Coolant ΔP</span><strong id="fdPc">–</strong><em id="fdPcd"></em></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tabs seg" role="tablist" aria-label="Inputs" id="tabs"></div>
+        <div class="ctl" id="ctl"></div>
+        <div class="presets" style="margin-top:16px" id="presets"></div>
+        <p style="font-size:13px;color:var(--dim);margin-top:8px">Presets are example conditions, not measured data. Core size defaults to your 9.25 × 4.5 × 2 in radiator.</p>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="band lab"><div class="wrap">
+  <div class="labhead">
+    <div><h2>Inside the fins: live louver flow</h2></div>
+    <p>A real fluid solver (lattice Boltzmann, D2Q9) running in your browser on a slice through the fin, air moving left to right through both louver banks. At low Reynolds number air slips straight between fins (duct-directed); faster air follows the louvers (louver-directed) and heat transfer jumps.</p>
+  </div>
+  <div class="flow" id="flowWrap"><canvas id="flow" aria-label="Live 2D flow field through louvered fins"></canvas></div>
+  <div class="flowbar">
+    <div class="seg" role="group" aria-label="Flow field"><button data-fm="speed" aria-pressed="true">Speed</button><button data-fm="temp" aria-pressed="false">Temperature</button><button data-fm="vort" aria-pressed="false">Vorticity</button></div>
+    <span id="fLeg" style="font-size:14px;color:var(--mute);flex:1 1 260px"></span>
+    <div class="seg" role="group" aria-label="Flow overlays"><button id="fTr" aria-pressed="true">Streaklines</button><button id="fPause" aria-pressed="false">Pause</button><button id="fReset" aria-pressed="false">Restart</button></div>
+  </div>
+  <div class="stats">
+    <div><span>Reynolds number, Re<sub>Lp</sub></span><strong id="sRe">–</strong></div>
+    <div><span>Mean flow angle in bank 1</span><strong id="sAng">–</strong></div>
+    <div><span>Flow efficiency η = angle / louver angle</span><strong id="sEta">–</strong><br><span class="regime" id="sReg">–</span></div>
+    <div><span>Solver</span><strong id="sSteps">–</strong></div>
+  </div>
+  <div class="minictl" id="miniCtl"></div>
+  <p style="font-size:13px;color:var(--dim);margin-top:12px" id="flowNote">The slice shows a shortened louver count per bank so the flow is visible; louver angle, fin-to-louver pitch ratio and Reynolds number match your settings.</p>
+</div></section>
+
+<section class="band"><div class="wrap">
+  <div class="grid2">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><h3 style="margin:0">Core face: where the heat goes</h3><div class="seg" role="group" aria-label="Face map color"><button data-fc="t" aria-pressed="true">Temperature</button><button data-fc="q" aria-pressed="false">Heat flux</button></div></div>
+      <p class="note">Each band is a tube; color is coolant temperature as it crosses the core, with the air leaving each fin row between them. Hover or tap to probe any point.</p>
+      <div class="fig" style="min-height:300px"><canvas id="face"></canvas></div>
+      <div class="cbar" style="width:100%;margin-top:10px"><div class="g"></div><div class="ends"><span id="fLo">–</span><span id="fMid">temperature</span><span id="fHi">–</span></div></div>
+    </div>
+    <div class="card">
+      <h3 id="c1t">Heat rejected vs speed</h3>
+      <p class="note" id="c1n">–</p>
+      <div class="fig"><svg id="c1"></svg></div>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="card">
+      <h3>Louver angle trade-off</h3>
+      <p class="note" id="c2n">–</p>
+      <div class="fig"><svg id="c2"></svg></div>
+    </div>
+    <div class="card">
+      <h3>Fin density trade-off</h3>
+      <p class="note" id="c3n">–</p>
+      <div class="fig"><svg id="c3"></svg></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="band" style="background:#0d1118;border-top:1px solid var(--line)"><div class="wrap">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:14px">
+    <h2>Every number</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="copy">Copy summary</button><button class="btn" id="reset">Reset all</button></div>
+  </div>
+  <div class="tgrid" id="tables"></div>
+  <div class="flags" id="flags"></div>
+</div></section>
+
+<section class="band"><div class="wrap">
+  <h2 style="margin-bottom:14px">How it's calculated</h2>
+  <div class="method">
+    <div>
+      <h3>Air side</h3>
+      <p>Heat transfer uses the Chang &amp; Wang (1997) louver-fin Colburn factor, fitted to a broad database of louvered-fin test cores:</p>
+      <div class="eq">j = Re<sub>Lp</sub><sup>−0.49</sup>(θ/90)<sup>0.27</sup>(F<sub>p</sub>/L<sub>p</sub>)<sup>−0.14</sup>(F<sub>l</sub>/L<sub>p</sub>)<sup>−0.29</sup>(T<sub>d</sub>/L<sub>p</sub>)<sup>−0.23</sup>(L<sub>l</sub>/L<sub>p</sub>)<sup>0.68</sup>(T<sub>p</sub>/L<sub>p</sub>)<sup>−0.28</sup>(δ<sub>f</sub>/L<sub>p</sub>)<sup>−0.05</sup></div>
+      <p>Friction uses the Kim &amp; Bullard (2002) flat-tube louver correlation, with entrance and exit losses added. Fin efficiency is the straight-fin tanh(mL)/mL with L = half the fin height.</p>
+      <div class="eq">h = j·G·c<sub>p</sub>·Pr<sup>−2/3</sup> &nbsp; ΔP = (G²/2ρ)[K<sub>c</sub> + 1 − σ² + f·A/A<sub>c</sub> − (1 − σ² − K<sub>e</sub>)]</div>
+      <h3 style="margin-top:16px">Airflow you actually get</h3>
+      <p>In Drive mode the face velocity is solved, not assumed: the core's pressure drop must equal the ram pressure your duct recovers (C<sub>p</sub>·½ρv²) plus the fan's pressure at that flow (a straight-line fan curve from shutoff pressure to free-air flow). Air density follows site altitude.</p>
+    </div>
+    <div>
+      <h3>Coolant side and overall</h3>
+      <p>Flat single-port tubes, laminar Nu = 7.54 with a developing-flow boost, Gnielinski above Re 4000, blended in between. Overall conductance and effectiveness:</p>
+      <div class="eq">1/UA = 1/(η<sub>o</sub>h<sub>a</sub>A<sub>a</sub>) + 1/(h<sub>c</sub>A<sub>c</sub>) + R<sub>wall</sub></div>
+      <div class="eq">ε = 1 − exp[(1/C<sub>r</sub>)·NTU<sup>0.22</sup>(e<sup>−C<sub>r</sub>NTU<sup>0.78</sup></sup> − 1)] &nbsp; (crossflow, both unmixed)</div>
+      <p>The face map marches each tube in 48 cells so the coolant cools along its length and each fin row heats its own air.</p>
+      <h3 style="margin-top:16px">What to trust</h3>
+      <ul>
+        <li>Correlations typically land within ±15–25% of test data inside their range. Flags above show when you leave it.</li>
+        <li>The louver slice is 2D and periodic: great for flow regime and angle, not for absolute ΔP.</li>
+        <li>Fin pattern assumes 85% louver length, single row of flat tubes, side tanks, single pass.</li>
+        <li>Check FSAE rules on coolant: glycol is shown for comparison only.</li>
+        <li>Use it to choose a direction, then confirm with CFD (ANSYS or SimScale) and dyno or MoTeC data.</li>
+      </ul>
+      <p style="margin-top:10px;font-size:14px;color:var(--mute)">Sources: Chang, Y.J. &amp; Wang, C.C., Int. J. Heat Mass Transfer 40(3), 1997, <a href="https://doi.org/10.1016/0017-9310(96)00116-0">doi</a>. Kim, M.H. &amp; Bullard, C.W., Int. J. Refrigeration 25, 2002. Gnielinski, 1976. Incropera, Fundamentals of Heat and Mass Transfer (ε-NTU).</p>
+    </div>
+  </div>
+</div></section>
+<footer class="band">Radiator Flow Lab · correlation-based estimates for design exploration, not a substitute for testing.</footer>
+
+<script type="text/plain" id="lbmsrc">/*LBM*/</script>
+<script>/*PHYS*/</script>
+<script>/*R3D*/</script>
+<script>/*APP*/</script>
+</body>
+</html>

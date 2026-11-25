@@ -1,0 +1,1820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radiator Flow Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE work: an engineering tool for a race team, precise but fun to play with
+   IDEA a CFD post-processing workstation: dark viewport, thermal color maps, a lab bench of instruments
+   PICTURE the live 3D radiator with air and coolant particles, then a live lattice-Boltzmann louver flow field
+   COLOUR graphite night ground, aluminum greys, thermal ramp blue to red, one scarlet accent for what matters
+   TYPE Archivo for titles and big figures, Inter for text and numbers
+   LAYOUT laptop: viewport two-thirds left, results and controls right; phone: title, viewport, sticky result bar, controls */
+:root{color-scheme:dark;--bg:#0b0e13;--panel:#12171f;--panel2:#171e28;--line:#243040;--ink:#e9eef4;--mute:#93a1b3;--dim:#64748a;--acc:#ef2b36;--cold:#3fa7d6;--hot:#f39a3b;--ok:#3ccf91}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:16px/1.55 Inter,system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:clip;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:Archivo,Inter,sans-serif;letter-spacing:-.02em;line-height:1.05;margin:0;text-wrap:balance}
+h1{font-size:clamp(28px,3.4vw,46px);font-weight:800}
+h2{font-size:clamp(24px,2.6vw,34px);font-weight:800}
+h3{font-size:18px;font-weight:700;letter-spacing:-.01em}
+p{margin:0}
+a{color:#8fc8ff}
+.band{padding:clamp(22px,3.2vw,48px) max(4vw,16px)}
+.wrap{max-width:1320px;margin:0 auto}
+.top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;padding:14px max(4vw,16px);border-bottom:1px solid var(--line);background:#0d1118}
+.brand{display:flex;gap:10px;align-items:center;font:700 16px Archivo,sans-serif}
+.brand i{width:26px;height:26px;border-radius:6px;background:repeating-linear-gradient(90deg,#c9d1da 0 2px,#5d6876 2px 4px);box-shadow:inset 0 0 0 2px #0d1118,0 0 0 1px #3a4656;display:block}
+.chip{font-size:13px;color:var(--mute);border:1px solid var(--line);border-radius:99px;padding:5px 11px;white-space:nowrap}
+.seg{display:inline-flex;background:#0b0f15;border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{font:600 14px Inter,sans-serif;color:var(--mute);background:none;border:0;border-radius:7px;padding:0 12px;min-height:36px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--panel2);color:var(--ink);box-shadow:inset 0 0 0 1px #33425a}
+.seg button:hover{color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #8fc8ff;outline-offset:2px}
+.hero{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);gap:20px;align-items:stretch}
+.headline{display:grid;gap:10px;margin-bottom:18px}
+.headline p{color:var(--mute);max-width:70ch}
+.headline b{color:var(--ink);font-weight:600}
+.view{position:relative;border-radius:16px;overflow:hidden;background:radial-gradient(120% 90% at 50% 20%,#18212d,#0b0e13 70%);border:1px solid var(--line);min-height:520px}
+.view canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+.view canvas:active{cursor:grabbing}
+.vbar{z-index:2;position:absolute;left:12px;right:12px;top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;pointer-events:none}
+.vbar>*{pointer-events:auto}
+.legend{z-index:2;position:absolute;left:14px;bottom:14px;right:14px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;pointer-events:none;flex-wrap:wrap}
+.cbar{display:grid;gap:4px;font-size:13px;color:var(--mute);width:min(300px,60%)}
+.cbar .g{height:9px;border-radius:5px;background:linear-gradient(90deg,#1c3a9e,#2994db,#8ce0d1,#fae073,#f58c33,#db2133)}
+.cbar .ends{display:flex;justify-content:space-between;white-space:nowrap}
+.hint{font-size:13px;color:var(--dim);text-align:right}
+.lbl{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;transition:opacity .25s}
+.lbl::before{content:"";position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:#e9eef4;box-shadow:0 0 0 3px rgba(233,238,244,.22)}
+.lbl::after{content:"";position:absolute;left:0;top:-38px;width:1px;height:34px;background:linear-gradient(rgba(233,238,244,.7),rgba(233,238,244,.15))}
+.lbl span{position:absolute;bottom:38px;left:0;transform:translateX(-50%);font-size:13px;line-height:1.25;white-space:nowrap;background:rgba(11,14,19,.82);border:1px solid #33425a;border-radius:8px;padding:6px 10px;backdrop-filter:blur(6px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.view::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 95% at 50% 45%,transparent 55%,rgba(5,7,10,.55));border-radius:16px}
+.lbl b{font-weight:600}
+#labels{position:absolute;inset:0;z-index:2;pointer-events:none}
+.lbl.hot b{color:#ff8f6b}.lbl.cold b{color:#7cc8f2}
+.side{display:grid;gap:14px;align-content:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.big{display:grid;gap:6px}
+.big .k{font-size:14px;color:var(--mute)}
+.big .v{font:800 clamp(44px,5vw,68px)/1 Archivo,sans-serif;letter-spacing:-.03em;white-space:nowrap}
+.big .v small{font-size:.42em;font-weight:700;color:var(--mute);margin-left:4px}
+.meter{height:12px;border-radius:7px;background:#0b0f15;border:1px solid var(--line);position:relative;overflow:hidden;margin-top:6px}
+.meter i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#2994db,#fae073 70%,#f58c33);border-radius:6px;transition:width .25s}
+.meter u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.status{font-size:14px;color:var(--mute)}
+.status b.good{color:var(--ok)}.status b.bad{color:#ff6a6f}
+.figs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.figs div{background:var(--panel);padding:10px 12px}
+.figs span{display:block;font-size:13px;color:var(--mute)}
+.figs em{display:block;font-style:normal;font-size:13px;font-weight:600;min-height:1em}.figs em.up{color:var(--ok)}.figs em.dn{color:#ff6a6f}
+.figs strong{font:700 20px Archivo,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tabs{display:flex;gap:2px;margin:-4px 0 14px;flex-wrap:wrap}
+.ctl{display:grid;gap:12px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 128px;gap:4px 10px;align-items:center}
+.row label{font-size:14px;color:var(--ink);font-weight:500}
+.row .sub{grid-column:1/-1;font-size:13px;color:var(--dim);margin-top:-2px}
+.num{display:flex;align-items:center;background:#0b0f15;border:1px solid #2e3b4e;border-radius:9px;padding:0 8px;height:40px}
+.num input{flex:1;width:0;background:none;border:0;color:var(--ink);font:500 16px Inter,sans-serif;font-variant-numeric:tabular-nums;text-align:right;padding:0;outline:none}
+.num em{font-style:normal;font-size:13px;color:var(--mute);margin-left:5px;white-space:nowrap}
+input[type=range]{grid-column:1/-1;-webkit-appearance:none;appearance:none;width:100%;height:28px;background:none;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--acc) var(--p,50%),#2a3545 var(--p,50%))}
+input[type=range]::-moz-range-track{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--acc) var(--p,50%),#2a3545 var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#f4f6f9;border:4px solid #0b0e13;box-shadow:0 0 0 1px #6b7a8e;margin-top:-8px}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#f4f6f9;border:4px solid #0b0e13;box-shadow:0 0 0 1px #6b7a8e}
+select{background:#0b0f15;color:var(--ink);border:1px solid #2e3b4e;border-radius:9px;height:40px;font:500 16px Inter,sans-serif;padding:0 8px;width:100%}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:40px}
+.sw{position:relative;width:50px;height:28px;border-radius:99px;background:#2a3545;border:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#f4f6f9;transition:transform .2s}
+.sw[aria-pressed=true]{background:var(--acc)}.sw[aria-pressed=true]::after{transform:translateX(22px)}
+.btn{font:600 14px Inter,sans-serif;color:var(--ink);background:var(--panel2);border:1px solid #33425a;border-radius:10px;min-height:40px;padding:0 14px;cursor:pointer}
+.btn:hover{border-color:#5a6d88}
+.presets{display:flex;gap:8px;flex-wrap:wrap}
+.lab{border-top:1px solid var(--line);background:linear-gradient(#0d1118,#0b0e13)}
+.labhead{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:end;margin-bottom:16px}
+.labhead p{color:var(--mute);max-width:68ch}
+.flow{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#06080b;touch-action:pan-y}
+.flow canvas{display:block;width:100%}
+.flowbar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-top:12px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.stats div{background:var(--panel);padding:12px 14px}
+.stats span{display:block;font-size:13px;color:var(--mute)}
+.stats strong{font:700 22px Archivo,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums}
+.regime{display:inline-block;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;margin-top:4px}
+.minictl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px}
+.fig{position:relative;min-height:260px}
+.grid2>.card{display:flex;flex-direction:column}.grid2>.card>.fig{flex:1}
+.fig>svg,.fig>canvas{position:absolute;inset:0;width:100%;height:100%}
+.card h3{margin-bottom:4px}
+.card .note{font-size:14px;color:var(--mute);margin-bottom:10px}
+svg text{font:13px Inter,sans-serif;fill:var(--mute);paint-order:stroke;stroke:var(--panel);stroke-width:4px}
+svg .ax{stroke:#2b3748;stroke-width:1}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th{font-weight:600;color:var(--mute);font-size:13px}
+.tgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.flags{display:grid;gap:8px;margin-top:8px}
+.flag{font-size:14px;padding:8px 12px;border-radius:10px;background:#1a1410;border:1px solid #4d3a22;color:#f3cf9a}
+.flag.okf{background:#0f1a15;border-color:#21483a;color:#8fe0bd}
+.method{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.method p,.method li{color:#c3cdd9;font-size:15px}
+.method ul{margin:6px 0 0;padding-left:18px}
+.eq{font:15px/1.5 "Cambria Math","STIX Two Math",Georgia,serif;color:var(--ink);background:#0b0f15;border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;overflow-x:auto;white-space:nowrap}
+footer{color:var(--dim);font-size:13px;border-top:1px solid var(--line)}
+.sticky{display:none}
+@media (min-width:1061px){.hero{grid-template-rows:clamp(600px,78vh,760px)}.side{display:flex;flex-direction:column;min-height:0}.side .card:last-child{flex:1;overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-color:#33425a transparent}}
+@media (max-width:1060px){.hero{grid-template-columns:minmax(0,1fr)}.view{min-height:440px}.side{grid-template-columns:repeat(2,minmax(0,1fr))}.labhead,.grid2{grid-template-columns:minmax(0,1fr)}.grid3{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:720px){.side{grid-template-columns:minmax(0,1fr)}.view{min-height:360px}.stats,.minictl{grid-template-columns:repeat(2,minmax(0,1fr))}.method,.tgrid{grid-template-columns:minmax(0,1fr)}
+ .sticky{display:flex;position:sticky;top:0;z-index:20;gap:12px;justify-content:space-between;align-items:center;background:rgba(11,14,19,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:8px 16px;font-size:14px}
+ .sticky strong{font:800 20px Archivo,sans-serif;white-space:nowrap}.hint{display:none}}
+@media (max-width:600px){.vbar .seg button{min-height:34px;font-size:13px;padding:0 10px}.lbl[data-k=lin],.lbl[data-k=lout],.lbl[data-k=lexh]{display:none}.view{min-height:420px}}
+@media (prefers-reduced-motion:reduce){.meter i{transition:none}}
+</style>
+</head>
+<body>
+<div class="sticky" id="sticky" aria-live="polite"><span>Heat rejected <strong id="sQ">–</strong></span><span>Coolant out <strong id="sT">–</strong></span></div>
+<header class="top">
+  <div class="brand"><i></i>Radiator Flow Lab</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <span class="chip" id="coreChip">9.25 × 4.5 × 2.0 in core</span>
+    <div class="seg" role="group" aria-label="Units"><button id="uSI" aria-pressed="true">SI</button><button id="uUS" aria-pressed="false">US</button></div>
+  </div>
+</header>
+
+<section class="band"><div class="wrap">
+  <div class="headline">
+    <h1 id="title">Radiator Flow Lab</h1>
+    <p id="lede">Move any slider or type a number. The 3D model, the air and coolant flow, the live louver simulation and every figure below update together.</p>
+  </div>
+  <div class="hero">
+    <div class="view" id="view">
+      <canvas id="gl" aria-label="3D radiator with animated air and coolant flow. Drag to rotate, scroll or pinch to zoom."></canvas>
+      <div id="labels">
+        <div class="lbl hot" data-k="lin"><span>Coolant in <b id="lIn">–</b></span></div>
+        <div class="lbl" data-k="lout"><span>Coolant out <b id="lOut">–</b></span></div>
+        <div class="lbl cold" data-k="lair"><span>Air in <b id="lAir">–</b> at <b id="lVel">–</b></span></div>
+        <div class="lbl hot" data-k="lexh"><span>Air out <b id="lExh">–</b></span></div>
+      </div>
+      <div class="vbar">
+        <div class="seg" role="group" aria-label="Render mode"><button id="vStudio" aria-pressed="false">Studio</button><button id="vThermal" aria-pressed="true">Thermal</button></div>
+        <div class="seg" role="group" aria-label="Overlays"><button id="vCut" aria-pressed="false">Cutaway</button><button id="vEx" aria-pressed="false">Explode</button><button id="vAir" aria-pressed="true">Airflow</button><button id="vSpin" aria-pressed="true">Spin</button></div>
+      </div>
+      <div class="legend">
+        <div class="cbar"><div class="g"></div><div class="ends"><span id="cLo">–</span><span>temperature</span><span id="cHi">–</span></div></div>
+        <div class="hint">Drag to orbit · scroll or pinch to zoom · double-click to reset<br>Airflow shown in slow motion (1/30×)</div>
+      </div>
+      <p id="noGL" hidden style="position:absolute;inset:auto 16px 50% 16px;text-align:center;color:var(--mute)">This browser has no WebGL2, so the 3D view is off. Everything else still works.</p>
+    </div>
+    <div class="side">
+      <div class="card">
+        <div class="big"><span class="k">Heat rejected to air</span><span class="v" id="bQ">–</span></div>
+        <div class="meter" aria-hidden="true"><i id="mQ"></i><u id="mL"></u></div>
+        <p class="status" id="stat" style="margin-top:8px">–</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button class="btn" id="pin">Pin as baseline</button><span id="pinNote" style="font-size:13px;color:var(--mute)">Pin a design, then change anything to compare.</span></div>
+        <div class="figs">
+          <div><span>Coolant out</span><strong id="fTc">–</strong><em id="fTcd"></em></div>
+          <div><span>Air out, mean</span><strong id="fTa">–</strong><em id="fTad"></em></div>
+          <div><span>Face velocity</span><strong id="fV">–</strong><em id="fVd"></em></div>
+          <div><span>Air-side ΔP</span><strong id="fdP">–</strong><em id="fdPd"></em></div>
+          <div><span>Effectiveness ε</span><strong id="fE">–</strong><em id="fEd"></em></div>
+          <div><span>Coolant ΔP</span><strong id="fdPc">–</strong><em id="fdPcd"></em></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tabs seg" role="tablist" aria-label="Inputs" id="tabs"></div>
+        <div class="ctl" id="ctl"></div>
+        <div class="presets" style="margin-top:16px" id="presets"></div>
+        <p style="font-size:13px;color:var(--dim);margin-top:8px">Presets are example conditions, not measured data. Core size defaults to your 9.25 × 4.5 × 2 in radiator.</p>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="band lab"><div class="wrap">
+  <div class="labhead">
+    <div><h2>Inside the fins: live louver flow</h2></div>
+    <p>A real fluid solver (lattice Boltzmann, D2Q9) running in your browser on a slice through the fin, air moving left to right through both louver banks. At low Reynolds number air slips straight between fins (duct-directed); faster air follows the louvers (louver-directed) and heat transfer jumps.</p>
+  </div>
+  <div class="flow" id="flowWrap"><canvas id="flow" aria-label="Live 2D flow field through louvered fins"></canvas></div>
+  <div class="flowbar">
+    <div class="seg" role="group" aria-label="Flow field"><button data-fm="speed" aria-pressed="true">Speed</button><button data-fm="temp" aria-pressed="false">Temperature</button><button data-fm="vort" aria-pressed="false">Vorticity</button></div>
+    <span id="fLeg" style="font-size:14px;color:var(--mute);flex:1 1 260px"></span>
+    <div class="seg" role="group" aria-label="Flow overlays"><button id="fTr" aria-pressed="true">Streaklines</button><button id="fPause" aria-pressed="false">Pause</button><button id="fReset" aria-pressed="false">Restart</button></div>
+  </div>
+  <div class="stats">
+    <div><span>Reynolds number, Re<sub>Lp</sub></span><strong id="sRe">–</strong></div>
+    <div><span>Mean flow angle in bank 1</span><strong id="sAng">–</strong></div>
+    <div><span>Flow efficiency η = angle / louver angle</span><strong id="sEta">–</strong><br><span class="regime" id="sReg">–</span></div>
+    <div><span>Solver</span><strong id="sSteps">–</strong></div>
+  </div>
+  <div class="minictl" id="miniCtl"></div>
+  <p style="font-size:13px;color:var(--dim);margin-top:12px" id="flowNote">The slice shows a shortened louver count per bank so the flow is visible; louver angle, fin-to-louver pitch ratio and Reynolds number match your settings.</p>
+</div></section>
+
+<section class="band"><div class="wrap">
+  <div class="grid2">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><h3 style="margin:0">Core face: where the heat goes</h3><div class="seg" role="group" aria-label="Face map color"><button data-fc="t" aria-pressed="true">Temperature</button><button data-fc="q" aria-pressed="false">Heat flux</button></div></div>
+      <p class="note">Each band is a tube; color is coolant temperature as it crosses the core, with the air leaving each fin row between them. Hover or tap to probe any point.</p>
+      <div class="fig" style="min-height:300px"><canvas id="face"></canvas></div>
+      <div class="cbar" style="width:100%;margin-top:10px"><div class="g"></div><div class="ends"><span id="fLo">–</span><span id="fMid">temperature</span><span id="fHi">–</span></div></div>
+    </div>
+    <div class="card">
+      <h3 id="c1t">Heat rejected vs speed</h3>
+      <p class="note" id="c1n">–</p>
+      <div class="fig"><svg id="c1"></svg></div>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="card">
+      <h3>Louver angle trade-off</h3>
+      <p class="note" id="c2n">–</p>
+      <div class="fig"><svg id="c2"></svg></div>
+    </div>
+    <div class="card">
+      <h3>Fin density trade-off</h3>
+      <p class="note" id="c3n">–</p>
+      <div class="fig"><svg id="c3"></svg></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="band" style="background:#0d1118;border-top:1px solid var(--line)"><div class="wrap">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:14px">
+    <h2>Every number</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="copy">Copy summary</button><button class="btn" id="reset">Reset all</button></div>
+  </div>
+  <div class="tgrid" id="tables"></div>
+  <div class="flags" id="flags"></div>
+</div></section>
+
+<section class="band"><div class="wrap">
+  <h2 style="margin-bottom:14px">How it's calculated</h2>
+  <div class="method">
+    <div>
+      <h3>Air side</h3>
+      <p>Heat transfer uses the Chang &amp; Wang (1997) louver-fin Colburn factor, fitted to a broad database of louvered-fin test cores:</p>
+      <div class="eq">j = Re<sub>Lp</sub><sup>−0.49</sup>(θ/90)<sup>0.27</sup>(F<sub>p</sub>/L<sub>p</sub>)<sup>−0.14</sup>(F<sub>l</sub>/L<sub>p</sub>)<sup>−0.29</sup>(T<sub>d</sub>/L<sub>p</sub>)<sup>−0.23</sup>(L<sub>l</sub>/L<sub>p</sub>)<sup>0.68</sup>(T<sub>p</sub>/L<sub>p</sub>)<sup>−0.28</sup>(δ<sub>f</sub>/L<sub>p</sub>)<sup>−0.05</sup></div>
+      <p>Friction uses the Kim &amp; Bullard (2002) flat-tube louver correlation, with entrance and exit losses added. Fin efficiency is the straight-fin tanh(mL)/mL with L = half the fin height.</p>
+      <div class="eq">h = j·G·c<sub>p</sub>·Pr<sup>−2/3</sup> &nbsp; ΔP = (G²/2ρ)[K<sub>c</sub> + 1 − σ² + f·A/A<sub>c</sub> − (1 − σ² − K<sub>e</sub>)]</div>
+      <h3 style="margin-top:16px">Airflow you actually get</h3>
+      <p>In Drive mode the face velocity is solved, not assumed: the core's pressure drop must equal the ram pressure your duct recovers (C<sub>p</sub>·½ρv²) plus the fan's pressure at that flow (a straight-line fan curve from shutoff pressure to free-air flow). Air density follows site altitude.</p>
+    </div>
+    <div>
+      <h3>Coolant side and overall</h3>
+      <p>Flat single-port tubes, laminar Nu = 7.54 with a developing-flow boost, Gnielinski above Re 4000, blended in between. Overall conductance and effectiveness:</p>
+      <div class="eq">1/UA = 1/(η<sub>o</sub>h<sub>a</sub>A<sub>a</sub>) + 1/(h<sub>c</sub>A<sub>c</sub>) + R<sub>wall</sub></div>
+      <div class="eq">ε = 1 − exp[(1/C<sub>r</sub>)·NTU<sup>0.22</sup>(e<sup>−C<sub>r</sub>NTU<sup>0.78</sup></sup> − 1)] &nbsp; (crossflow, both unmixed)</div>
+      <p>The face map marches each tube in 48 cells so the coolant cools along its length and each fin row heats its own air.</p>
+      <h3 style="margin-top:16px">What to trust</h3>
+      <ul>
+        <li>Correlations typically land within ±15–25% of test data inside their range. Flags above show when you leave it.</li>
+        <li>The louver slice is 2D and periodic: great for flow regime and angle, not for absolute ΔP.</li>
+        <li>Fin pattern assumes 85% louver length, single row of flat tubes, side tanks, single pass.</li>
+        <li>Check FSAE rules on coolant: glycol is shown for comparison only.</li>
+        <li>Use it to choose a direction, then confirm with CFD (ANSYS or SimScale) and dyno or MoTeC data.</li>
+      </ul>
+      <p style="margin-top:10px;font-size:14px;color:var(--mute)">Sources: Chang, Y.J. &amp; Wang, C.C., Int. J. Heat Mass Transfer 40(3), 1997, <a href="https://doi.org/10.1016/0017-9310(96)00116-0">doi</a>. Kim, M.H. &amp; Bullard, C.W., Int. J. Refrigeration 25, 2002. Gnielinski, 1976. Incropera, Fundamentals of Heat and Mass Transfer (ε-NTU).</p>
+    </div>
+  </div>
+</div></section>
+<footer class="band">Radiator Flow Lab · correlation-based estimates for design exploration, not a substitute for testing.</footer>
+
+<script type="text/plain" id="lbmsrc">// D2Q9 lattice Boltzmann (BGK + Smagorinsky) through a 2-bank louvered fin array, periodic across fin pitch.
+// Passive temperature field advected semi-Lagrangian, louvers held at T=1, inlet air at T=0.
+const EX = [0, 1, 0, -1, 0, 1, -1, -1, 1], EY = [0, 0, 1, 0, -1, 1, 1, -1, -1];
+const WQ = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
+const OPP = [0, 3, 4, 1, 2, 7, 8, 5, 6];
+class LouverSim {
+  constructor() { this.cfg = null; }
+  build(c) {
+    // c: {theta, fpr (Fp/Lp), re, n (louvers per bank), lpc (cells per louver pitch), pitches, tr (fin thickness/Lp)}
+    this.cfg = { ...c };
+    const L = c.lpc, Fpc = Math.max(10, Math.round(c.fpr * L));
+    const pitches = c.pitches || 4;
+    const NY = Fpc * pitches;
+    const xs = Math.round(3.2 * L);
+    const runLen = L * (2 * c.n + 3.4);
+    const NX = Math.round(xs + runLen + 7 * L);
+    Object.assign(this, { NX, NY, Fpc, L, xs });
+    const N = NX * NY;
+    this.N = N;
+    this.f = new Float32Array(9 * N); this.g = new Float32Array(9 * N);
+    this.solid = new Uint8Array(N);
+    this.ux = new Float32Array(N); this.uy = new Float32Array(N); this.rho = new Float32Array(N);
+    this.T = new Float32Array(N); this.T2 = new Float32Array(N); this.vort = new Float32Array(N);
+    // geometry: segments (x0,y0,x1,y1) per fin row
+    const th = c.theta * Math.PI / 180, chord = 0.94 * L;
+    const segs = [];
+    const thick = Math.max(1.0, c.tr * L);
+    this.thick = thick;
+    for (let k = 0; k < pitches; k++) {
+      const yc = (k + 0.5) * Fpc;
+      let x = xs;
+      segs.push({ x0: x, y0: yc, x1: x + L, y1: yc, kind: 'flat' }); x += L;
+      const lv = (sign) => { for (let i = 0; i < c.n; i++) { const cx = x + L * 0.5, dx = Math.cos(th) * chord / 2, dy = Math.sin(th) * chord / 2 * sign; segs.push({ x0: cx - dx, y0: yc - dy, x1: cx + dx, y1: yc + dy, kind: sign > 0 ? 'up' : 'down' }); x += L; } };
+      lv(1);
+      segs.push({ x0: x, y0: yc, x1: x + 1.4 * L, y1: yc, kind: 'flat' }); x += 1.4 * L;
+      lv(-1);
+      segs.push({ x0: x, y0: yc, x1: x + L, y1: yc, kind: 'flat' }); x += L;
+      if (k === 0) { this.bank1 = [xs + L, xs + L * (1 + c.n)]; this.bank2 = [xs + L * (2.4 + c.n), xs + L * (2.4 + 2 * c.n)]; this.finEnd = x; }
+    }
+    this.segs = segs;
+    const r = thick / 2 + (c.pad ?? 0.35);
+    for (const s of segs) {
+      const minx = Math.floor(Math.min(s.x0, s.x1) - r - 1), maxx = Math.ceil(Math.max(s.x0, s.x1) + r + 1);
+      const miny = Math.floor(Math.min(s.y0, s.y1) - r - 1), maxy = Math.ceil(Math.max(s.y0, s.y1) + r + 1);
+      const vx = s.x1 - s.x0, vy = s.y1 - s.y0, l2 = vx * vx + vy * vy;
+      for (let y = miny; y <= maxy; y++) for (let x = minx; x <= maxx; x++) {
+        const px = x + 0.5, py = y + 0.5;
+        let t = ((px - s.x0) * vx + (py - s.y0) * vy) / l2; t = Math.max(0, Math.min(1, t));
+        const dx = px - (s.x0 + t * vx), dy = py - (s.y0 + t * vy);
+        if (dx * dx + dy * dy <= r * r && x >= 0 && x < NX) this.solid[((y % NY) + NY) % NY * NX + x] = 1;
+      }
+    }
+    this.setRe(c.re);
+    this.reset();
+  }
+  setRe(re) {
+    this.re = re;
+    this.u0 = this.cfg.u0 || 0.11;
+    // characteristic velocity is the core velocity (inlet / porosity); length is louver pitch
+    const porosity = 1 - this.thick / this.Fpc;
+    const nu = (this.u0 / porosity) * this.L / re;
+    this.tau0 = 3 * nu + 0.5;
+    this.alpha = nu / 0.71;
+  }
+  reset() {
+    const { N, f, u0 } = this;
+    for (let i = 0; i < N; i++) {
+      const u = this.solid[i] ? 0 : u0;
+      for (let q = 0; q < 9; q++) {
+        const eu = EX[q] * u; f[q * N + i] = WQ[q] * (1 + 3 * eu + 4.5 * eu * eu - 1.5 * u * u);
+      }
+      this.T[i] = this.solid[i] ? 1 : 0; this.rho[i] = 1; this.ux[i] = u; this.uy[i] = 0;
+    }
+    this.steps = 0; this.blown = false;
+  }
+  step() {
+    const { NX, NY, N, f, g, solid, ux, uy, rho, tau0, u0 } = this;
+    const Cs2x18 = 18 * 1.4142 * 0.14 * 0.14;
+    // collide + stream (push)
+    for (let y = 0; y < NY; y++) {
+      const yu = y === NY - 1 ? 0 : y + 1, yd = y === 0 ? NY - 1 : y - 1;
+      for (let x = 0; x < NX; x++) {
+        const i = y * NX + x;
+        if (solid[i]) continue;
+        let f0 = f[i], f1 = f[N + i], f2 = f[2 * N + i], f3 = f[3 * N + i], f4 = f[4 * N + i], f5 = f[5 * N + i], f6 = f[6 * N + i], f7 = f[7 * N + i], f8 = f[8 * N + i];
+        let r = f0 + f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8;
+        let vx = (f1 + f5 + f8 - f3 - f6 - f7) / r, vy = (f2 + f5 + f6 - f4 - f7 - f8) / r;
+        if (x === 0) { r = 1; vx = u0; vy = 0; f0 = f1 = f2 = f3 = f4 = f5 = f6 = f7 = f8 = NaN; }
+        rho[i] = r; ux[i] = vx; uy[i] = vy;
+        const usq = 1.5 * (vx * vx + vy * vy);
+        const e0 = 4 / 9 * r * (1 - usq);
+        const e1 = r / 9 * (1 + 3 * vx + 4.5 * vx * vx - usq), e3 = r / 9 * (1 - 3 * vx + 4.5 * vx * vx - usq);
+        const e2 = r / 9 * (1 + 3 * vy + 4.5 * vy * vy - usq), e4 = r / 9 * (1 - 3 * vy + 4.5 * vy * vy - usq);
+        const a5 = vx + vy, a6 = -vx + vy;
+        const e5 = r / 36 * (1 + 3 * a5 + 4.5 * a5 * a5 - usq), e7 = r / 36 * (1 - 3 * a5 + 4.5 * a5 * a5 - usq);
+        const e6 = r / 36 * (1 + 3 * a6 + 4.5 * a6 * a6 - usq), e8 = r / 36 * (1 - 3 * a6 + 4.5 * a6 * a6 - usq);
+        let o0, o1, o2, o3, o4, o5, o6, o7, o8;
+        if (x === 0) { o0 = e0; o1 = e1; o2 = e2; o3 = e3; o4 = e4; o5 = e5; o6 = e6; o7 = e7; o8 = e8; }
+        else {
+          const n1 = f1 - e1, n2 = f2 - e2, n3 = f3 - e3, n4 = f4 - e4, n5 = f5 - e5, n6 = f6 - e6, n7 = f7 - e7, n8 = f8 - e8;
+          const pxx = n1 + n3 + n5 + n6 + n7 + n8, pyy = n2 + n4 + n5 + n6 + n7 + n8, pxy = n5 - n6 + n7 - n8;
+          const Q = Math.sqrt(pxx * pxx + pyy * pyy + 2 * pxy * pxy);
+          const tau = 0.5 * (tau0 + Math.sqrt(tau0 * tau0 + Cs2x18 * Q / r));
+          const om = 1 / tau;
+          o0 = f0 + om * (e0 - f0); o1 = f1 - om * n1; o2 = f2 - om * n2; o3 = f3 - om * n3; o4 = f4 - om * n4;
+          o5 = f5 - om * n5; o6 = f6 - om * n6; o7 = f7 - om * n7; o8 = f8 - om * n8;
+        }
+        const xr = x + 1, xl = x - 1;
+        g[i] = o0;
+        // dir 1 (+x)
+        if (xr < NX) { const j = y * NX + xr; if (solid[j]) g[3 * N + i] = o1; else g[N + j] = o1; }
+        if (xl >= 0) { const j = y * NX + xl; if (solid[j]) g[N + i] = o3; else g[3 * N + j] = o3; }
+        { const j = yu * NX + x; if (solid[j]) g[4 * N + i] = o2; else g[2 * N + j] = o2; }
+        { const j = yd * NX + x; if (solid[j]) g[2 * N + i] = o4; else g[4 * N + j] = o4; }
+        if (xr < NX) { const j = yu * NX + xr; if (solid[j]) g[7 * N + i] = o5; else g[5 * N + j] = o5; }
+        if (xl >= 0) { const j = yu * NX + xl; if (solid[j]) g[8 * N + i] = o6; else g[6 * N + j] = o6; }
+        if (xl >= 0) { const j = yd * NX + xl; if (solid[j]) g[5 * N + i] = o7; else g[7 * N + j] = o7; }
+        if (xr < NX) { const j = yd * NX + xr; if (solid[j]) g[6 * N + i] = o8; else g[8 * N + j] = o8; }
+      }
+    }
+    // outlet: zero-gradient for incoming populations
+    for (let y = 0; y < NY; y++) {
+      const i = y * NX + NX - 1, k = i - 1;
+      for (let q = 0; q < 9; q++) g[q * N + i] = g[q * N + k];
+    }
+    this.f = g; this.g = f;
+    this.steps++;
+    this.advectT();
+    if (this.steps % 50 === 0) {
+      const mid = (NY >> 1) * NX + (NX >> 1);
+      if (!isFinite(this.ux[mid]) || Math.abs(this.ux[mid]) > 0.6) { this.blown = true; this.reset(); }
+    }
+  }
+  advectT() {
+    const { NX, NY, T, T2, ux, uy, solid, alpha } = this;
+    for (let y = 0; y < NY; y++) {
+      for (let x = 0; x < NX; x++) {
+        const i = y * NX + x;
+        if (solid[i]) { T2[i] = 1; continue; }
+        if (x === 0) { T2[i] = 0; continue; }
+        let sx = x - ux[i], sy = y - uy[i];
+        if (sx < 0) sx = 0; if (sx > NX - 1) sx = NX - 1;
+        sy = (sy + NY) % NY;
+        const x0 = sx | 0, y0 = sy | 0, x1 = Math.min(NX - 1, x0 + 1), y1 = (y0 + 1) % NY, fx = sx - x0, fy = sy - y0;
+        const a = T[y0 * NX + x0], b = T[y0 * NX + x1], c = T[y1 * NX + x0], d = T[y1 * NX + x1];
+        let v = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+        const xr = Math.min(NX - 1, x + 1), yu = (y + 1) % NY, yd = (y - 1 + NY) % NY;
+        const lap = T[y * NX + xr] + T[y * NX + x - 1] + T[yu * NX + x] + T[yd * NX + x] - 4 * T[i];
+        T2[i] = v + alpha * lap;
+      }
+    }
+    this.T = T2; this.T2 = T;
+  }
+  computeVorticity() {
+    const { NX, NY, ux, uy, vort, solid } = this;
+    for (let y = 0; y < NY; y++) {
+      const yu = (y + 1) % NY, yd = (y - 1 + NY) % NY;
+      for (let x = 1; x < NX - 1; x++) {
+        const i = y * NX + x;
+        vort[i] = solid[i] ? 0 : (uy[i + 1] - uy[i - 1]) - (ux[yu * NX + x] - ux[yd * NX + x]);
+      }
+    }
+  }
+  flowEfficiency() {
+    const { NX, NY, ux, uy, solid } = this;
+    let su = 0, sv = 0;
+    const [a, b] = this.bank1;
+    for (let y = 0; y < NY; y++) for (let x = Math.round(a + this.L); x < b; x++) { const i = y * NX + x; if (!solid[i]) { su += ux[i]; sv += uy[i]; } }
+    const ang = Math.atan2(sv, su) * 180 / Math.PI;
+    return { angle: ang, eta: Math.max(0, Math.min(1.2, ang / this.cfg.theta)) };
+  }
+  sample(x, y) { // bilinear velocity
+    const { NX, NY, ux, uy } = this;
+    if (x < 0) x = 0; if (x > NX - 1.001) x = NX - 1.001;
+    y = ((y % NY) + NY) % NY;
+    const x0 = x | 0, y0 = y | 0, x1 = x0 + 1, y1 = (y0 + 1) % NY, fx = x - x0, fy = y - y0;
+    const i00 = y0 * NX + x0, i10 = y0 * NX + x1, i01 = y1 * NX + x0, i11 = y1 * NX + x1;
+    return [
+      (ux[i00] * (1 - fx) + ux[i10] * fx) * (1 - fy) + (ux[i01] * (1 - fx) + ux[i11] * fx) * fy,
+      (uy[i00] * (1 - fx) + uy[i10] * fx) * (1 - fy) + (uy[i01] * (1 - fx) + uy[i11] * fx) * fy];
+  }
+}
+if (typeof module !== 'undefined') module.exports = { LouverSim };
+</script>
+<script>// Radiator thermal-hydraulic model. Units: SI inside, mm for geometry inputs.
+function airProps(Tc, P) {
+  const T = Tc + 273.15;
+  const rho = P / (287.05 * T);
+  const mu = 1.716e-5 * Math.pow(T / 273.15, 1.5) * (273.15 + 110.4) / (T + 110.4);
+  const k = 0.0241 * Math.pow(T / 273.15, 0.81);
+  const cp = 1006 + 0.0004 * (T - 300) ** 2 * 0;
+  return { rho, mu, k, cp, Pr: mu * cp / k };
+}
+function coolantProps(Tc, type) {
+  const muW = 2.414e-5 * Math.pow(10, 247.8 / (Tc + 273.15 - 140));
+  if (type === 'eg50') {
+    return { rho: 1082 - 0.45 * Tc, cp: 3300 + 3.0 * Tc, mu: muW * 3.1, k: 0.38 + 0.0003 * Tc };
+  }
+  return { rho: 1000 - 0.0178 * Math.pow(Math.abs(Tc - 4), 1.7), cp: 4180 + 0.0 * Tc, mu: muW, k: 0.569 + 0.00188 * Tc - 7.9e-6 * Tc * Tc };
+}
+function pressureAt(alt) { return 101325 * Math.pow(1 - 2.25577e-5 * alt, 5.25588); }
+
+function solveRadiator(p) {
+  // geometry (m)
+  const W = p.W / 1000, H = p.H / 1000, D = p.D / 1000;
+  const Fp = p.Fp / 1000, Lp = p.Lp / 1000, Fl = p.Fl / 1000, df = p.df / 1000, Th = p.Th / 1000, tw = p.tw / 1000;
+  const theta = p.theta;
+  const Tp = Fl + Th;                       // tube pitch
+  const N = Math.max(1, Math.floor((H - Fl) / Tp)); // tubes (fin row above and below each)
+  const rows = N + 1;                       // fin rows incl. top/bottom against side plates
+  const Ll = 0.85 * Fl;                     // louver length
+  const nf = Math.floor(W / Fp);            // fins per row
+  const Afr = W * H;
+  const finFrontal = rows * Fl * W;         // open frontal band
+  const Ac = rows * Fl * W * (1 - df / Fp); // minimum free-flow area
+  const sigma = Ac / Afr;
+  const Afin = rows * nf * 2 * Fl * D;
+  const Atube = N * 2 * W * D * (1 - df / Fp);
+  const A = Afin + Atube;
+  const Dh = 4 * Ac * D / A;
+  // air
+  const P = pressureAt(p.alt);
+  const Tfilm = (p.TaIn + p.TcIn) / 2 * 0.5 + p.TaIn * 0.5;
+  const air = airProps(Tfilm, P);
+  const airIn = airProps(p.TaIn, P);
+  const Vf = p.Vface;  // face velocity (m/s), supplied or solved by operatingPoint()
+  const mA = airIn.rho * Vf * Afr;
+  const Vc = mA / (air.rho * Ac);
+  const ReLp = air.rho * Vc * Lp / air.mu;
+  // Chang & Wang (1997) j
+  const r = (x) => x / Lp;
+  const j = Math.pow(ReLp, -0.49) * Math.pow(theta / 90, 0.27) * Math.pow(r(Fp), -0.14) * Math.pow(r(Fl), -0.29)
+    * Math.pow(r(D), -0.23) * Math.pow(r(Ll), 0.68) * Math.pow(r(Tp), -0.28) * Math.pow(r(df), -0.05);
+  // Kim & Bullard (2002) f
+  const f = Math.pow(ReLp, -0.781) * Math.pow(theta / 90, 0.444) * Math.pow(r(Fp), -1.682) * Math.pow(r(Fl), -1.22)
+    * Math.pow(r(D), 0.818) * Math.pow(r(Ll), 1.97);
+  const G = mA / Ac;
+  const hA = j * G * air.cp * Math.pow(air.Pr, -2 / 3);
+  const kAl = 190;
+  const m = Math.sqrt(2 * hA / (kAl * df));
+  const Lf = Fl / 2;
+  const etaF = Math.tanh(m * Lf) / (m * Lf);
+  const eta0 = 1 - (Afin / A) * (1 - etaF);
+  // core friction (Kim & Bullard) + entrance/exit losses (Kays & London form)
+  const dPair = G * G / (2 * airIn.rho) * ((1 - sigma * sigma + 0.4) + f * (A / Ac) * (airIn.rho / air.rho) - (1 - sigma * sigma - 0.1));
+  // coolant
+  const cool = coolantProps(p.TcIn - 3, p.cool);
+  const Q = p.flow / 60000; // m3/s
+  const wi = D - 2 * tw, hi = Math.max(0.2e-3, Th - 2 * tw);
+  const Ai1 = wi * hi, Pi1 = 2 * (wi + hi);
+  const Dhi = 4 * Ai1 / Pi1;
+  const Vi = Q / (N * Ai1);
+  const Rei = cool.rho * Vi * Dhi / cool.mu;
+  const Pri = cool.mu * cool.cp / cool.k;
+  const Gz = Dhi * Rei * Pri / W;
+  const NuLam = 7.54 + 0.03 * Gz / (1 + 0.016 * Math.pow(Gz, 2 / 3));
+  let NuTurb = 0, fD;
+  if (Rei > 2300) {
+    const fd = Math.pow(0.790 * Math.log(Rei) - 1.64, -2);
+    NuTurb = (fd / 8) * (Rei - 1000) * Pri / (1 + 12.7 * Math.sqrt(fd / 8) * (Math.pow(Pri, 2 / 3) - 1));
+  }
+  let Nui;
+  if (Rei < 2300) Nui = NuLam;
+  else if (Rei < 4000) { const w = (Rei - 2300) / 1700; Nui = NuLam * (1 - w) + Math.max(NuLam, NuTurb) * w; }
+  else Nui = Math.max(NuLam, NuTurb);
+  const fLam = 96 / Rei * 0.86; // flat duct, aspect ~ 0.025 -> fRe ~ 89
+  const fTurb = Rei > 2300 ? Math.pow(0.790 * Math.log(Rei) - 1.64, -2) : 0;
+  fD = Rei < 2300 ? fLam : (Rei < 4000 ? fLam + (fTurb - fLam) * (Rei - 2300) / 1700 : fTurb);
+  const hi_ = Nui * cool.k / Dhi;
+  const Ai = N * Pi1 * W;
+  const dPcoreC = fD * (W / Dhi) * cool.rho * Vi * Vi / 2;
+  const dPtanks = 1.5 * cool.rho * Vi * Vi / 2 * 2; // contraction + expansion at tube ends
+  const dPcool = dPcoreC + dPtanks;
+  // overall
+  const Rw = tw / (kAl * N * 2 * D * W);
+  const UA = 1 / (1 / (eta0 * hA * A) + 1 / (hi_ * Ai) + Rw);
+  const Ca = mA * air.cp, mC = Q * cool.rho, Cc = mC * cool.cp;
+  const Cmin = Math.min(Ca, Cc), Cmax = Math.max(Ca, Cc), Cr = Cmin / Cmax;
+  const NTU = UA / Cmin;
+  const eps = 1 - Math.exp((1 / Cr) * Math.pow(NTU, 0.22) * (Math.exp(-Cr * Math.pow(NTU, 0.78)) - 1));
+  const Qw = eps * Cmin * (p.TcIn - p.TaIn);
+  const TcOut = p.TcIn - Qw / Cc, TaOut = p.TaIn + Qw / Ca;
+  const airPower = dPair * mA / airIn.rho;
+  // local face map: nx cells along tubes, rows of tubes; coolant flows +x
+  const nx = p.quick ? 1 : 48;
+  const UAc = UA / (nx * N), Cac = Ca / (nx * N), Cct = Cc / N;
+  const mapC = [], mapA = [];
+  for (let t = 0; t < N; t++) {
+    let Tc = p.TcIn; const rc = [], ra = [];
+    for (let i = 0; i < nx; i++) {
+      const e = 1 - Math.exp(-UAc / Cac);
+      const q = e * Cac * (Tc - p.TaIn);
+      ra.push(p.TaIn + q / Cac); rc.push(Tc - q / (2 * Cct));
+      Tc -= q / Cct;
+    }
+    mapC.push(rc); mapA.push(ra);
+  }
+  return { N, rows, nf, Tp, Ll, Afr, Ac, sigma, Afin, Atube, A, Dh, P, air, mA, Vc, ReLp, j, f, hA, etaF, eta0, dPair,
+    Vi, Rei, Dhi, Nui, hi: hi_, Ai, dPcool, UA, Ca, Cc, Cr, NTU, eps, Q: Qw, TcOut, TaOut, airPower, mapC, mapA, nx, rhoC: cool.rho };
+}
+// Air-side operating point: duct recovery of vehicle dynamic pressure + optional fan (linear curve) = core dP
+function operatingPoint(p) {
+  if (p.mode === 'tunnel') return p.Vface;
+  const P = pressureAt(p.alt), rho = P / (287.05 * (p.TaIn + 273.15));
+  const v = p.speed / 3.6;
+  const ram = p.Cp * 0.5 * rho * v * v;
+  const Afr = p.W * p.H / 1e6;
+  const avail = (V) => ram + (p.fan ? Math.max(0, p.fanP * (1 - V * Afr / p.fanQ)) : 0);
+  let lo = 0.01, hi = 40;
+  for (let i = 0; i < 34; i++) {
+    const mid = (lo + hi) / 2;
+    const dp = solveRadiator({ ...p, Vface: mid, quick: true }).dPair;
+    if (dp > avail(mid)) hi = mid; else lo = mid;
+  }
+  return Math.max(0.05, (lo + hi) / 2);
+}
+if (typeof module !== 'undefined') module.exports = { solveRadiator, pressureAt, operatingPoint };
+</script>
+<script>// Radiator 3D renderer v2: hand-built WebGL2 with real geometry, PBR shading, shadow map, floor reflection,
+// streak-ribbon air and coolant flow, exploded view and callouts.
+const M4 = {
+  id() { const o = new Float32Array(16); o[0] = o[5] = o[10] = o[15] = 1; return o; },
+  persp(fov, a, n, f) { const t = 1 / Math.tan(fov / 2), o = new Float32Array(16); o[0] = t / a; o[5] = t; o[10] = (f + n) / (n - f); o[11] = -1; o[14] = 2 * f * n / (n - f); return o; },
+  ortho(l, r, b, t, n, f) { const o = new Float32Array(16); o[0] = 2 / (r - l); o[5] = 2 / (t - b); o[10] = -2 / (f - n); o[12] = -(r + l) / (r - l); o[13] = -(t + b) / (t - b); o[14] = -(f + n) / (f - n); o[15] = 1; return o; },
+  look(e, c, u) {
+    let zx = e[0] - c[0], zy = e[1] - c[1], zz = e[2] - c[2]; let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+    let xx = u[1] * zz - u[2] * zy, xy = u[2] * zx - u[0] * zz, xz = u[0] * zy - u[1] * zx; l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return new Float32Array([xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0, -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1]);
+  },
+  mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; },
+  tr(x, y, z) { const o = M4.id(); o[12] = x; o[13] = y; o[14] = z; return o; },
+  rz(a) { const o = M4.id(), c = Math.cos(a), s = Math.sin(a); o[0] = c; o[1] = s; o[4] = -s; o[5] = c; return o; }
+};
+
+// ---------------- geometry ----------------
+class GB {
+  constructor() { this.P = []; this.N = []; this.U = []; this.I = []; }
+  v(p, n, u) { this.P.push(p[0], p[1], p[2]); this.N.push(n[0], n[1], n[2]); this.U.push(u ? u[0] : 0, u ? u[1] : 0); return this.P.length / 3 - 1; }
+  q(a, b, c, d) { this.I.push(a, b, c, a, c, d); }
+  add(m, off) { const b = this.P.length / 3; for (let i = 0; i < m.P.length; i += 3) { this.P.push(m.P[i] + off[0], m.P[i + 1] + off[1], m.P[i + 2] + off[2]); } this.N.push(...m.N); this.U.push(...m.U); for (const i of m.I) this.I.push(i + b); return this; }
+  done() { return { P: new Float32Array(this.P), N: new Float32Array(this.N), U: new Float32Array(this.U), I: new Uint32Array(this.I) }; }
+}
+const nrm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function roundedBox(w, h, d, r, k = 6) {
+  const g = new GB(), H = [w / 2, h / 2, d / 2];
+  r = Math.min(r, H[0], H[1], H[2]) * 0.999;
+  const co = (hh) => { const a = []; for (let i = 0; i <= k; i++) a.push(-hh + r * i / k); a.push(-hh * 0.33, hh * 0.33); for (let i = k; i >= 0; i--) a.push(hh - r * i / k); a.sort((x, y) => x - y); return a.filter((v, i, s) => i === 0 || Math.abs(v - s[i - 1]) > 1e-6); };
+  for (let ax = 0; ax < 3; ax++) for (const sg of [-1, 1]) {
+    const b = (ax + 1) % 3, c = (ax + 2) % 3, cb = co(H[b]), cc = co(H[c]), base = g.P.length / 3;
+    for (let i = 0; i < cb.length; i++) for (let j = 0; j < cc.length; j++) {
+      const p = [0, 0, 0]; p[ax] = sg * H[ax]; p[b] = cb[i]; p[c] = cc[j];
+      const inner = p.map((v, a) => Math.max(-(H[a] - r), Math.min(H[a] - r, v)));
+      let dv = [p[0] - inner[0], p[1] - inner[1], p[2] - inner[2]], l = Math.hypot(...dv);
+      const n = l > 1e-6 ? dv.map((v) => v / l) : (() => { const f = [0, 0, 0]; f[ax] = sg; return f; })();
+      g.v([inner[0] + n[0] * r, inner[1] + n[1] * r, inner[2] + n[2] * r], n, [i / (cb.length - 1), j / (cc.length - 1)]);
+    }
+    for (let i = 0; i < cb.length - 1; i++) for (let j = 0; j < cc.length - 1; j++) { const a = base + i * cc.length + j; g.q(a, a + cc.length, a + cc.length + 1, a + 1); }
+  }
+  return g.done();
+}
+function sweep(path, rad, seg = 20, closed = false) {
+  const g = new GB(), n = path.length;
+  const T = path.map((p, i) => { const a = path[Math.max(0, i - 1)], b = path[Math.min(n - 1, i + 1)]; if (closed) { const a2 = path[(i - 1 + n) % n], b2 = path[(i + 1) % n]; return nrm([b2[0] - a2[0], b2[1] - a2[1], b2[2] - a2[2]]); } return nrm([b[0] - a[0], b[1] - a[1], b[2] - a[2]]); });
+  let up = Math.abs(T[0][1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  let Nn = nrm(cross(cross(T[0], up), T[0]));
+  let len = 0;
+  for (let i = 0; i < n; i++) {
+    if (i > 0) { const t = T[i]; const b = cross(t, Nn); Nn = nrm(cross(b, t)); len += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1], path[i][2] - path[i - 1][2]); }
+    const B = cross(T[i], Nn), R = typeof rad === 'function' ? rad(i / (n - 1)) : rad;
+    for (let j = 0; j <= seg; j++) {
+      const a = j / seg * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const nn = [Nn[0] * c + B[0] * s, Nn[1] * c + B[1] * s, Nn[2] * c + B[2] * s];
+      g.v([path[i][0] + nn[0] * R, path[i][1] + nn[1] * R, path[i][2] + nn[2] * R], nn, [len, j / seg]);
+    }
+  }
+  const rows = closed ? n : n - 1;
+  for (let i = 0; i < rows; i++) for (let j = 0; j < seg; j++) { const a = i * (seg + 1) + j, b = ((i + 1) % n) * (seg + 1) + j; g.q(a, b, b + 1, a + 1); }
+  return g.done();
+}
+const arcPts = (c, r, a0, a1, plane, k = 12) => { const o = []; for (let i = 0; i <= k; i++) { const a = a0 + (a1 - a0) * i / k; const u = Math.cos(a) * r, v = Math.sin(a) * r; o.push(plane === 'xz' ? [c[0] + u, c[1], c[2] + v] : plane === 'xy' ? [c[0] + u, c[1] + v, c[2]] : [c[0], c[1] + u, c[2] + v]); } return o; };
+const linePts = (a, b, k = 4) => { const o = []; for (let i = 0; i <= k; i++) o.push([a[0] + (b[0] - a[0]) * i / k, a[1] + (b[1] - a[1]) * i / k, a[2] + (b[2] - a[2]) * i / k]); return o; };
+const joinPts = (...ls) => { const o = []; for (const l of ls) for (const p of l) { const q = o[o.length - 1]; if (!q || Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) > 1e-4) o.push(p); } return o; };
+function cylinder(r, h, seg = 32, caps = true) { // along y, centered
+  const g = new GB();
+  for (const y of [-h / 2, h / 2]) for (let j = 0; j <= seg; j++) { const a = j / seg * Math.PI * 2; g.v([Math.cos(a) * r, y, Math.sin(a) * r], [Math.cos(a), 0, Math.sin(a)], [j / seg * Math.PI * 2 * r, y]); }
+  for (let j = 0; j < seg; j++) g.q(j, j + seg + 1, j + seg + 2, j + 1);
+  if (caps) for (const [y, ny] of [[-h / 2, -1], [h / 2, 1]]) { const c = g.v([0, y, 0], [0, ny, 0], [0, 0]); const b = g.P.length / 3; for (let j = 0; j <= seg; j++) { const a = j / seg * Math.PI * 2; g.v([Math.cos(a) * r, y, Math.sin(a) * r], [0, ny, 0], [Math.cos(a) * r, Math.sin(a) * r]); } for (let j = 0; j < seg; j++) g.I.push(c, b + j, b + j + 1); }
+  return g.done();
+}
+const rotXYZ = (m, f) => { const P = new Float32Array(m.P.length), N = new Float32Array(m.N.length); for (let i = 0; i < m.P.length; i += 3) { const a = f([m.P[i], m.P[i + 1], m.P[i + 2]]), b = f([m.N[i], m.N[i + 1], m.N[i + 2]]); P.set(a, i); N.set(b, i); } return { P, N, U: m.U, I: m.I }; };
+const yToZ = (v) => [v[0], v[2], -v[1]];
+const yToX = (v) => [v[1], -v[0], v[2]];
+function stadiumTube(L, Th, D, seg = 10) {
+  const g = new GB(), a = Th / 2, zc = D / 2 - a, ring = [];
+  for (let i = 0; i <= seg; i++) { const t = -Math.PI / 2 + Math.PI * i / seg; ring.push([Math.sin(t) * a, zc + Math.cos(t) * a, Math.sin(t), Math.cos(t)]); }
+  for (let i = 0; i <= seg; i++) { const t = Math.PI / 2 + Math.PI * i / seg; ring.push([Math.sin(t) * a, -zc + Math.cos(t) * a, Math.sin(t), Math.cos(t)]); }
+  ring.push(ring[0]);
+  for (const x of [-L / 2, L / 2]) for (const [y, z, ny, nz] of ring) g.v([x, y, z], [0, ny, nz], [x, 0]);
+  const m = ring.length; for (let i = 0; i < m - 1; i++) g.q(i, i + m, i + m + 1, i + 1);
+  return g.done();
+}
+function finRow(W, Fl, D, Fp) {
+  const g = new GB(), rc = Math.min(Fp / 2, Fl / 3), nw = Math.floor(W / Fp), y0 = -Fl / 2, y1 = Fl / 2, pts = [];
+  const x0 = -W / 2 + (W - (nw - 1) * Fp) / 2;
+  for (let i = 0; i < nw; i++) {
+    const x = x0 + i * Fp, upward = i % 2 === 0;
+    const ya = upward ? y0 + rc : y1 - rc, yb = upward ? y1 - rc : y0 + rc;
+    for (let k = 0; k <= 3; k++) { const y = ya + (yb - ya) * k / 3; pts.push([x, y, upward ? -1 : 1, 0, (y - y0) / Fl]); }
+    if (i < nw - 1) {
+      const cx = x + Fp / 2, cy = upward ? y1 - rc : y0 + rc;
+      for (let k = 1; k < 6; k++) { const t = Math.PI - Math.PI * k / 6; const s = upward ? 1 : -1; const nx = Math.cos(t), ny = Math.sin(t) * s; pts.push([cx + nx * Fp / 2, cy + ny * rc, nx, ny, -1]); }
+    }
+  }
+  for (const z of [-D / 2, D / 2]) for (const [x, y, nx, ny, u] of pts) g.v([x, y, z], [nx, ny, 0], [u, z]);
+  const m = pts.length; for (let i = 0; i < m - 1; i++) g.q(i, i + m, i + m + 1, i + 1);
+  return g.done();
+}
+function annulusPlate(w, h, R, thick, seg = 72) { // rectangle with circular hole, in xy, thickness along z
+  const g = new GB();
+  for (const [z, nz] of [[thick / 2, 1], [-thick / 2, -1]]) {
+    const b = g.P.length / 3;
+    for (let i = 0; i <= seg; i++) {
+      const a = i / seg * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const k = Math.min(Math.abs(c) > 1e-6 ? (w / 2) / Math.abs(c) : 1e9, Math.abs(s) > 1e-6 ? (h / 2) / Math.abs(s) : 1e9);
+      g.v([c * R, s * R, z], [0, 0, nz], [0, 0]); g.v([c * k, s * k, z], [0, 0, nz], [1, 0]);
+    }
+    for (let i = 0; i < seg; i++) { const a = b + i * 2; g.q(a, a + 1, a + 3, a + 2); }
+  }
+  return g.done();
+}
+function bladeMesh(R, hub, nB) {
+  const g = new GB(), nr = 7, nc = 6;
+  for (let b = 0; b < nB; b++) {
+    const base = g.P.length / 3, a0 = b / nB * Math.PI * 2;
+    for (let i = 0; i <= nr; i++) for (let j = 0; j <= nc; j++) {
+      const r = hub + (R - hub) * i / nr, c = j / nc - 0.5;
+      const span = (0.62 - 0.18 * i / nr) * (1 + 0.25 * Math.sin(i / nr * Math.PI));
+      const pitch = 0.75 - 0.35 * i / nr;
+      const a = a0 + c * span + 0.25 * (i / nr) ** 2;
+      const z = -c * span * r * Math.tan(pitch) * 0.5 + 0.9 * (c * c - 0.25) * r * 0.08;
+      g.v([Math.cos(a) * r, Math.sin(a) * r, z], [0, 0, 1], [i / nr, j / nc]);
+    }
+    for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) { const a = base + i * (nc + 1) + j; g.q(a, a + nc + 1, a + nc + 2, a + 1); }
+  }
+  const m = g.done();
+  // recompute normals
+  const N = new Float32Array(m.P.length);
+  for (let t = 0; t < m.I.length; t += 3) { const [a, b, c] = [m.I[t] * 3, m.I[t + 1] * 3, m.I[t + 2] * 3]; const e1 = [m.P[b] - m.P[a], m.P[b + 1] - m.P[a + 1], m.P[b + 2] - m.P[a + 2]], e2 = [m.P[c] - m.P[a], m.P[c + 1] - m.P[a + 1], m.P[c + 2] - m.P[a + 2]]; const n = cross(e1, e2); for (const v of [a, b, c]) { N[v] += n[0]; N[v + 1] += n[1]; N[v + 2] += n[2]; } }
+  for (let i = 0; i < N.length; i += 3) { const n = nrm([N[i], N[i + 1], N[i + 2]]); N[i] = n[0]; N[i + 1] = n[1]; N[i + 2] = n[2]; }
+  m.N = N; return m;
+}
+
+// ---------------- shaders ----------------
+const RAMP_GLSL = `
+vec3 ramp(float t){ t=clamp(t,0.,1.);
+ vec3 c0=vec3(.11,.23,.62),c1=vec3(.16,.58,.86),c2=vec3(.55,.88,.82),c3=vec3(.98,.88,.45),c4=vec3(.96,.55,.2),c5=vec3(.86,.13,.2);
+ float s=t*5.; if(s<1.)return mix(c0,c1,s); if(s<2.)return mix(c1,c2,s-1.); if(s<3.)return mix(c2,c3,s-2.); if(s<4.)return mix(c3,c4,s-3.); return mix(c4,c5,s-4.);}
+vec3 lin(vec3 c){ return pow(c,vec3(2.2)); }`;
+const VS_MAIN = `#version 300 es
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec2 aUV; layout(location=3) in vec3 iOff; layout(location=4) in vec4 iA;
+uniform mat4 uVP; uniform mat4 uModel; uniform float uMirror; uniform float uFloorY;
+out vec3 vW; out vec3 vN; out vec2 vUV; out vec4 vA; out vec3 vL;
+void main(){ vec4 w=uModel*vec4(aPos+iOff,1.); vN=mat3(uModel)*aNrm;
+ if(uMirror>.5){ w.y=2.*uFloorY-w.y; vN.y=-vN.y; }
+ vW=w.xyz; vUV=aUV; vA=iA; vL=aPos; gl_Position=uVP*w; }`;
+const FS_DEPTH = `#version 300 es
+precision mediump float; out vec4 o; void main(){ o=vec4(1.); }`;
+const FS_MAIN = `#version 300 es
+precision highp float; precision highp sampler2DShadow;
+in vec3 vW; in vec3 vN; in vec2 vUV; in vec4 vA; in vec3 vL; out vec4 o;
+uniform vec3 uCam; uniform int uKind; uniform float uThermal; uniform float uTaIn; uniform float uTcIn; uniform float uW; uniform float uD; uniform float uLp; uniform float uTheta;
+uniform float uCut; uniform int uPass; uniform int uCutMode; uniform float uMirror; uniform float uFloorY; uniform float uEtaF;
+uniform sampler2DShadow uShadow; uniform mat4 uLightVP; uniform vec3 uLdir; uniform sampler2D uTemp; uniform vec2 uTempSize; uniform float uTime;
+${RAMP_GLSL}
+const float PI=3.14159265;
+vec3 env(vec3 d){
+ float y=d.y; vec3 c=mix(vec3(.018,.021,.027),vec3(.06,.07,.085),smoothstep(-.1,.7,y));
+ c+=vec3(2.4,2.35,2.25)*smoothstep(.82,.93,y);
+ c+=vec3(2.6,2.35,2.0)*smoothstep(.94,.99,dot(d,normalize(vec3(.75,.35,.55))));
+ c+=vec3(1.,1.3,1.9)*smoothstep(.91,.985,dot(d,normalize(vec3(-.8,.25,-.55))));
+ c+=vec3(.5,.55,.6)*smoothstep(.95,.995,dot(d,normalize(vec3(-.6,.15,.8))));
+ c+=vec3(.12,.14,.17)*exp(-abs(y)*10.);
+ if(y<0.) c=mix(c,vec3(.012,.014,.017),smoothstep(0.,-.12,y));
+ return c; }
+vec3 envR(vec3 d,float r){ vec3 a=mix(vec3(.03,.035,.042),vec3(.5,.52,.55),clamp(d.y*.6+.25,0.,1.)); return mix(env(d),a,clamp(r*r*1.8,0.,1.)); }
+float D_GGX(float nh,float a){ float a2=a*a; float d=nh*nh*(a2-1.)+1.; return a2/(PI*d*d); }
+float G_S(float nv,float nl,float r){ float k=(r+1.)*(r+1.)/8.; return nv/(nv*(1.-k)+k)*nl/(nl*(1.-k)+k); }
+vec3 bump(vec3 n,float h,float s){ vec3 dx=dFdx(vW),dy=dFdy(vW); float hx=dFdx(h),hy=dFdy(h); vec3 r1=cross(dy,n),r2=cross(n,dx); float det=dot(dx,r1); vec3 g=sign(det)*(hx*r1+hy*r2); return normalize(abs(det)*n-g*s); }
+float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+float shadowAt(vec3 w,vec3 n){
+ vec4 l=uLightVP*vec4(w+n*.6,1.); vec3 p=l.xyz/l.w*.5+.5; if(p.x<0.||p.x>1.||p.y<0.||p.y>1.) return 1.;
+ float s=0.; vec2 t=vec2(1./2048.);
+ for(int i=-1;i<=1;i++) for(int j=-1;j<=1;j++) s+=texture(uShadow,vec3(p.xy+vec2(i,j)*t*1.5,p.z-.0012));
+ return s/9.; }
+vec3 light(vec3 base,float metal,float rough,vec3 n,vec3 v,float sh,float ao){
+ vec3 F0=mix(vec3(.04),base,metal); vec3 dif=base*(1.-metal); float nv=max(dot(n,v),1e-3);
+ vec3 col=vec3(0.);
+ vec3 Ls[3]; vec3 Cs[3]; Ls[0]=uLdir; Cs[0]=vec3(3.2,3.0,2.75)*sh; Ls[1]=normalize(vec3(-.7,.3,-.5)); Cs[1]=vec3(.55,.7,1.)*1.1; Ls[2]=normalize(vec3(-.5,.4,.8)); Cs[2]=vec3(.35,.37,.4);
+ for(int i=0;i<3;i++){ vec3 L=Ls[i]; float nl=max(dot(n,L),0.); if(nl<=0.) continue; vec3 h=normalize(L+v); float nh=max(dot(n,h),0.);
+  float a=max(.04,rough*rough); vec3 F=F0+(1.-F0)*pow(1.-max(dot(h,v),0.),5.);
+  vec3 spec=D_GGX(nh,a)*G_S(nv,nl,rough)*F/(4.*nv*nl+1e-3);
+  col+=(dif*(1.-F)/PI*1.0+spec)*Cs[i]*nl; }
+ vec3 Fr=F0+(max(vec3(1.-rough),F0)-F0)*pow(1.-nv,5.);
+ vec3 amb=dif*mix(vec3(.05,.055,.065),vec3(.28,.3,.34),n.y*.5+.5)*.9;
+ col+=(amb+envR(reflect(-v,n),rough)*Fr)*ao;
+ return col; }
+void main(){
+ vec3 n=normalize(vN); vec3 v=normalize(uCam-vW); if(dot(n,v)<0.) n=-n;
+ float alpha=1.;
+ bool cut=vW.x>uCut;
+ if(uCutMode==1){ if(uPass==0&&cut) discard; if(uPass==1&&!cut) discard; }
+ if(uKind==3){ // floor
+  float r=length(vW.xz)/900.; vec3 c=mix(vec3(.0075,.009,.012),vec3(.0028,.0039,.006),smoothstep(0.,.8,r));
+  vec2 gp=vW.xz/40.; vec2 gg=abs(fract(gp)-.5); float line=1.-smoothstep(.0,.025*length(fwidth(gp))*20.,min(gg.x,gg.y)); c+=line*.006*(1.-smoothstep(.1,.8,r));
+  float sh=shadowAt(vW,vec3(0,1,0)); c*=.35+.65*sh;
+  float fog=smoothstep(.3,.95,r); vec3 bg=vec3(.0028,.0039,.0060);
+  c=mix(c,bg,fog);
+  o=vec4(pow(c,vec3(1./2.2)),mix(.86,1.,fog)); return; }
+ vec3 base=vec3(.8,.82,.84); float metal=1., rough=.32, ao=1.; vec3 emit=vec3(0.);
+ float tn=-1.;
+ if(uKind==0){ // tanks: bead-blasted cast aluminum with fine streaks
+  float s=hash(floor(vW.yz*vec2(3.,.4)))*.5+hash(floor(vW.xy*8.))*.5; n=bump(n,s*.05+.02*sin(vW.y*2.1),.35);
+  base=vec3(.70,.72,.75); rough=.42; }
+ if(uKind==1){ // flat tube
+  vec2 tc=vec2(((vW.x+uW*.5)/uW*(uTempSize.x-1.)+.5)/uTempSize.x,(vA.z+.5)/uTempSize.y);
+  tn=texture(uTemp,tc).b; base=vec3(.74,.76,.79); rough=.28; }
+ if(uKind==2){ // serpentine louvered fin
+  float zf=clamp((uD*.5-vW.z)/uD,0.,1.); float dm=zf*uD; float u=vUV.x;
+  float nL=floor((uD-3.4*uLp)/uLp*.5); float e=uLp, b1=e+nL*uLp, t0=b1+1.4*uLp, b2=t0+nL*uLp;
+  float sgn=0.; if(dm>e&&dm<b1) sgn=1.; else if(dm>t0&&dm<b2) sgn=-1.;
+  float ph=dm/uLp; float fw=fwidth(ph); float detail=1.-smoothstep(.18,.45,fw);
+  if(u>=0.&&sgn!=0.&&u>.08&&u<.92){
+   float s=fract(ph); float edge=min(s,1.-s);
+   float aw=fwidth(ph)*1.2+.005; float m=smoothstep(.05,.05+aw,edge);
+   if(u>.12&&u<.88&&uThermal<.5) alpha=mix(1.,m,detail);
+   float tilt=radians(uTheta)*sgn; n=normalize(mix(n,normalize(n+vec3(0.,0.,sin(tilt)*sign(n.x+1e-4))*1.2),detail));
+   ao=mix(1.,.55+.45*smoothstep(0.,.18,edge),detail);
+  }
+  if(u<0.) ao=.8;
+  float ed=min(zf,1.-zf); ao*=mix(1.,.38,smoothstep(.0,.16,ed));
+  vec2 tc=vec2(((vW.x+uW*.5)/uW*(uTempSize.x-1.)+.5)/uTempSize.x,(vA.z+.5)/uTempSize.y); vec4 tt=texture(uTemp,tc);
+  float mid=u<0.?0.:1.-abs(2.*u-1.);
+  float taL=mix(tt.g*.55,tt.g,zf);
+  tn=mix(tt.r,taL,mid*.55);
+  float var=hash(vec2(floor((vW.x+uW)/max(.3,uLp*1.2)),vA.z)); base=vec3(.86,.87,.89)*(.9+.14*var); rough=.34+.1*var; metal=.6; }
+ if(uKind==4){ base=vec3(.035,.036,.04); metal=0.; rough=.62; float rib=sin(vUV.x*1.6); n=bump(n,rib*.08,.6); } // rubber
+ if(uKind==5){ base=vec3(.75,.05,.07); metal=.85; rough=.28; float kn=sin(vUV.x*6.); n=bump(n,kn*.05,.6*smoothstep(.0,.2,abs(vL.y))); } // red anodized cap
+ if(uKind==6){ base=vec3(.045,.047,.052); metal=0.; rough=.45; } // black nylon fan
+ if(uKind==7){ // TIG weld bead: stacked-dime ripples
+  float ph=fract(vUV.x/1.35); float hgt=pow(ph,1.6)*.6; n=bump(n,hgt,.9);
+  base=vec3(.82,.83,.85); rough=.18; }
+ if(uKind==8){ base=vec3(.62,.63,.65); rough=.22; } // stainless
+ if(uKind==9){ base=vec3(.08,.085,.09); metal=0.; rough=.7; } // rubber grommet
+ if(uThermal>.5&&tn>=0.){ vec3 tcol=lin(ramp(tn)); base=tcol; metal=.25; rough=.4; emit=tcol*.22; }
+ float sh=uMirror>.5?1.:shadowAt(vW,n);
+ vec3 col=light(base,metal,rough,n,v,sh,ao)+emit;
+ if(uPass==1){ alpha=.2; col=col*.6+ (tn>=0.?lin(ramp(tn))*.4:vec3(.08,.1,.13)); }
+ if(uMirror>.5){ float d=max(0.,uFloorY-vW.y); col*=.5*exp(-d*.02); }
+ col=col*.92; col=(col*(2.51*col+.03))/(col*(2.43*col+.59)+.14);
+ o=vec4(pow(clamp(col,0.,1.),vec3(1./2.2)),alpha);
+}`;
+const VS_RIB = `#version 300 es
+layout(location=0) in vec3 aP; layout(location=1) in vec3 aQ; layout(location=2) in vec3 aS; // side, temp, alpha
+uniform mat4 uVP; uniform vec2 uRes; uniform float uWid; uniform float uTa; uniform float uTc; out vec4 vC; out float vE;
+${RAMP_GLSL}
+void main(){ vec4 p=uVP*vec4(aP,1.), q=uVP*vec4(aQ,1.);
+ vec2 a=p.xy/p.w*uRes, b=q.xy/q.w*uRes; vec2 d=b-a; float l=length(d); d=l>1e-4?d/l:vec2(1.,0.);
+ vec2 nn=vec2(-d.y,d.x); float w=uWid*(.4+.6*aS.z);
+ p.xy+=nn*aS.x*w/uRes*p.w; gl_Position=p; vE=aS.x;
+ vC=vec4(ramp((aS.y-uTa)/max(.1,uTc-uTa)),aS.z); }`;
+const FS_RIB = `#version 300 es
+precision mediump float; in vec4 vC; in float vE; out vec4 o;
+void main(){ float e=1.-abs(vE); float a=vC.a*smoothstep(0.,.7,e); vec3 c=vC.rgb*(1.+.6*e); o=vec4(c*a,a); }`;
+
+class Radiator3D {
+  constructor(canvas, labelsEl) {
+    this.cv = canvas; this.labelsEl = labelsEl;
+    const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+    if (!gl) { this.ok = false; return; }
+    this.ok = true; this.gl = gl;
+    this.prog = this.mk(VS_MAIN, FS_MAIN); this.dprog = this.mk(VS_MAIN, FS_DEPTH); this.rprog = this.mk(VS_RIB, FS_RIB);
+    // shadow map
+    this.SM = 2048;
+    this.shTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.shTex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, this.SM, this.SM);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.shFB = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, this.shFB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shTex, 0);
+    gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.tTex = gl.createTexture();
+    this.instBuf = gl.createBuffer(); this.ribBuf = gl.createBuffer();
+    this.yaw = -0.55; this.pitch = 0.3; this.vy = 0; this.vp = 0; this.zoom = 1; this.autoSpin = true;
+    this.thermal = 1; this.cutaway = false; this.showAir = true; this.fanOn = false; this.explode = 0; this.ex = 0;
+    this.H = 10; this.nAir = 800; this.nCool = 420;
+    this.air = { al: new Float32Array(this.nAir), pos: new Float32Array(this.nAir * 3), T: new Float32Array(this.nAir), hist: new Float32Array(this.nAir * this.H * 4), v: new Float32Array(this.nAir), age: new Float32Array(this.nAir) };
+    this.cool = { s: new Float32Array(this.nCool * 3), hist: new Float32Array(this.nCool * this.H * 4) };
+    this.histT = 0; this.t = 0; this.fanAng = 0;
+    this.Ldir = nrm([0.42, 0.88, 0.5]);
+    this.bindInput();
+  }
+  mk(vs, fs) {
+    const gl = this.gl, sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    p.u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); p.u[a.name] = gl.getUniformLocation(p, a.name); }
+    return p;
+  }
+  up(m) {
+    const gl = this.gl, mk = (d, t = gl.ARRAY_BUFFER) => { const b = gl.createBuffer(); gl.bindBuffer(t, b); gl.bufferData(t, d, gl.STATIC_DRAW); return b; };
+    return { p: mk(m.P), n: mk(m.N), u: mk(m.U), i: mk(m.I, gl.ELEMENT_ARRAY_BUFFER), count: m.I.length };
+  }
+  free(o) { const gl = this.gl; if (!o) return; for (const k of ['p', 'n', 'u', 'i']) gl.deleteBuffer(o[k]); }
+  bindInput() {
+    const cv = this.cv, ptrs = new Map(); let pinch = 0;
+    cv.addEventListener('pointerdown', (e) => { ptrs.set(e.pointerId, [e.clientX, e.clientY]); cv.setPointerCapture(e.pointerId); this.autoSpin = false; this.onSpin && this.onSpin(false); });
+    cv.addEventListener('pointermove', (e) => {
+      if (!ptrs.has(e.pointerId)) return;
+      const p = ptrs.get(e.pointerId), dx = e.clientX - p[0], dy = e.clientY - p[1]; ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      if (ptrs.size === 1) { this.vy = -dx * 0.5; this.yaw -= dx * 0.007; if (e.pointerType !== 'touch') { this.pitch = Math.max(-0.05, Math.min(1.3, this.pitch + dy * 0.005)); } }
+      else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) this.zoom = Math.max(0.45, Math.min(2.2, this.zoom * pinch / d)); pinch = d; }
+    });
+    const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = 0; };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom = Math.max(0.45, Math.min(2.2, this.zoom * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+    cv.addEventListener('dblclick', () => { this.yaw = -0.55; this.pitch = 0.3; this.zoom = 1; this.autoSpin = true; this.onSpin && this.onSpin(true); });
+  }
+  // ---------- model ----------
+  setModel(p, r) {
+    this.p = p; this.r = r;
+    const key = [p.W, p.H, p.D, p.Th, p.Fl, p.Fp, r.N, this.fanOn].join('|');
+    if (key !== this.geoKey) { this.buildGeo(p, r); this.geoKey = key; this.resetParticles(); }
+    this.uploadTemps(p, r);
+  }
+  buildGeo(p, r) {
+    const W = p.W, D = p.D, Th = p.Th, Fl = p.Fl, N = r.N, rows = r.rows;
+    const H = N * Th + rows * Fl; this.coreH = H;
+    if (this.M) for (const k in this.M) this.free(this.M[k]);
+    const M = this.M = {};
+    M.tube = this.up(stadiumTube(W + 10, Th, D));
+    M.fin = this.up(finRow(W, Fl, D, p.Fp));
+    const y0 = -H / 2, inst = [];
+    this.tubeY = [];
+    for (let t = 0; t < N; t++) { const y = y0 + Fl * (t + 1) + Th * (t + 0.5); this.tubeY.push(y); inst.push(0, y, 0, 0, 0, t, 0); }
+    this.tubeInst = inst.length / 7;
+    for (let k = 0; k < rows; k++) { const y = y0 + k * (Fl + Th) + Fl / 2; inst.push(0, y, 0, 0, 0, k, 0); }
+    this.finInst = rows;
+    this.instData = new Float32Array(inst);
+    const gl = this.gl; gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf); gl.bufferData(gl.ARRAY_BUFFER, this.instData, gl.STATIC_DRAW);
+    // headers, tanks, welds
+    const tw = Math.max(24, Math.min(36, H * 0.24)), tH = H + 14, tD = D + 8, hx = W / 2 + 5;
+    this.tankW = tw; this.tankH = tH;
+    const rr = Math.min(tw, tD) * 0.45;
+    M.tank = this.up(roundedBox(tw, tH, tD, rr, 7));
+    M.header = this.up(roundedBox(3.2, tH + 4, tD + 4, 1.4, 3));
+    M.chan = this.up(roundedBox(W + 4, 2.4, D - 2, 1, 2));
+    const wp = []; { const a = tH / 2 - rr, b = tD / 2 - rr; const seg = (cy, cz, a0) => arcPts([0, cy, cz], rr + 0.2, a0, a0 + Math.PI / 2, 'yz', 8); wp.push(...joinPts(seg(a, b, 0), seg(-a, b, Math.PI / 2), seg(-a, -b, Math.PI), seg(a, -b, Math.PI * 1.5))); }
+    // arcPts in 'yz' uses u->y, v->z, with c=[x,cy,cz]
+    M.weld = this.up(sweep(wp, 1.15, 10, true));
+    // pipes and hoses
+    const xL = -(hx + tw), xR = hx + tw, yIn = H / 2 - 16, yOut = -H / 2 + 16, pr = 9.5, hr = 12.5;
+    const pipeL = joinPts(linePts([xL + 8, yIn, 0], [xL - 26, yIn, 0], 3));
+    const hoseL = joinPts(linePts([xL - 14, yIn, 0], [xL - 30, yIn, 0], 2), arcPts([xL - 30, yIn, -30], 30, Math.PI / 2, Math.PI, 'xz', 14).map((q) => [q[0] - 0 + 0, q[1], q[2]]).map((q) => [xL - 30 + (q[0] - (xL - 30)) * 1, q[1], q[2]]), linePts([xL - 60, yIn, -30], [xL - 60, yIn, -160], 4));
+    // fix arc orientation: centre (xL-30, yIn, -30); start angle pi/2 gives (xL-30, -30+30=0) ok, end pi gives (xL-60, -30)
+    M.pipeL = this.up(sweep(pipeL, pr, 24));
+    M.hoseL = this.up(sweep(hoseL, hr, 28));
+    const pipeR = joinPts(linePts([xR - 8, yOut, 0], [xR + 26, yOut, 0], 3));
+    const hoseR = joinPts(linePts([xR + 14, yOut, 0], [xR + 30, yOut, 0], 2), arcPts([xR + 30, yOut, -30], 30, Math.PI / 2, 0, 'xz', 14), linePts([xR + 60, yOut, -30], [xR + 60, yOut, -160], 4));
+    M.pipeR = this.up(sweep(pipeR, pr, 24)); M.hoseR = this.up(sweep(hoseR, hr, 28));
+    const ring = (c, R, rt, axis) => sweep(arcPts(c, R, 0, Math.PI * 2, axis, 40), rt, 10, true);
+    M.beadL = this.up(ring([xL - 20, yIn, 0], pr + 0.2, 1.3, 'yz')); M.beadR = this.up(ring([xR + 20, yOut, 0], pr + 0.2, 1.3, 'yz'));
+    M.clampL = this.up(new GB().add(ring([xL - 22, yIn, 0], hr + 0.6, 1.5, 'yz'), [0, 0, 0]).add(roundedBox(7, 6, 9, 1.5, 2), [xL - 22, yIn + hr + 3, 0]).done());
+    M.clampR = this.up(new GB().add(ring([xR + 22, yOut, 0], hr + 0.6, 1.5, 'yz'), [0, 0, 0]).add(roundedBox(7, 6, 9, 1.5, 2), [xR + 22, yOut - hr - 3, 0]).done());
+    // filler neck & cap on right tank, overflow nipple
+    const xn = hx + tw / 2, yTop = tH / 2;
+    M.neck = this.up(new GB().add(cylinder(10.5, 22, 32, false), [xn, yTop + 8, 0]).add(cylinder(12.5, 2.4, 32), [xn, yTop + 18.5, 0]).done());
+    M.cap = this.up(new GB().add(cylinder(15, 7, 48), [xn, yTop + 23, 0]).add(cylinder(9, 3, 32), [xn, yTop + 28, 0]).done());
+    M.nipple = this.up(sweep(joinPts(linePts([xn, yTop + 12, -8], [xn, yTop + 12, -26], 3)), 3, 14));
+    // brackets with grommets and bolts
+    const br = new GB(), gr = new GB(), bo = new GB();
+    for (const x of [-(hx + tw / 2), hx + tw / 2]) {
+      br.add(roundedBox(16, 24, 4, 1.6, 2), [x, -tH / 2 - 10, -D / 2 + 6]);
+      gr.add(sweep(arcPts([x, -tH / 2 - 15, -D / 2 + 6], 4.8, 0, Math.PI * 2, 'xy', 24), 2.3, 10, true), [0, 0, 0]);
+      bo.add(rotXYZ(cylinder(2.6, 12, 6), yToZ), [x, -tH / 2 - 15, -D / 2 + 6]);
+    }
+    M.brk = this.up(br.done()); M.grom = this.up(gr.done()); M.bolt = this.up(bo.done());
+    // fan assembly
+    if (this.fanOn) {
+      const fanD = Math.min(H + 6, W * 0.92), nF = Math.max(1, Math.min(3, Math.floor((W + 10) / (fanD + 6))));
+      const colW = (W + 6) / nF, zf = -D / 2 - 7;
+      const sh = new GB(), rim = new GB(), mot = new GB(), st = new GB();
+      this.fans = [];
+      for (let i = 0; i < nF; i++) {
+        const cx = -W / 2 - 3 + colW * (i + 0.5);
+        this.fans.push([cx, 0, zf - 6]);
+        sh.add(annulusPlate(colW, H + 8, fanD / 2, 2.4), [cx, 0, zf]);
+        rim.add(sweep(arcPts([cx, 0, zf - 4], fanD / 2 + 0.4, 0, Math.PI * 2, 'xy', 72), (q) => 2.2, 12, true), [0, 0, 0]);
+        mot.add(rotXYZ(cylinder(fanD * 0.15, 20, 40), yToZ), [cx, 0, zf - 20]);
+        mot.add(rotXYZ(cylinder(fanD * 0.17, 3, 40), yToZ), [cx, 0, zf - 10]);
+        for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; st.add(sweep(linePts([cx + Math.cos(a) * fanD * 0.15, Math.sin(a) * fanD * 0.15, zf - 16], [cx + Math.cos(a) * fanD * 0.49, Math.sin(a) * fanD * 0.49, zf - 3], 2), 1.8, 8), [0, 0, 0]); }
+      }
+      M.shroud = this.up(sh.done()); M.rim = this.up(rim.done()); M.motor = this.up(mot.done()); M.strut = this.up(st.done());
+      M.blade = this.up(bladeMesh(fanD * 0.46, fanD * 0.17, 7));
+      M.hub = this.up(rotXYZ(cylinder(fanD * 0.175, 9, 40), yToZ));
+    }
+    M.floor = this.up((() => { const g = new GB(); const s = 3000; const a = g.v([-s, 0, -s], [0, 1, 0]), b = g.v([s, 0, -s], [0, 1, 0]), c = g.v([s, 0, s], [0, 1, 0]), d = g.v([-s, 0, s], [0, 1, 0]); g.q(a, b, c, d); return g.done(); })());
+    this.floorY = -tH / 2 - 24;
+    this.inPort = [xL - 60, yIn, -160]; this.outPort = [xR + 60, yOut, -160];
+    this.inlet = [xL - 20, yIn, 0]; this.outlet = [xR + 20, yOut, 0]; this.hx = hx; this.yIn = yIn; this.yOut = yOut;
+    this.modelW = W + 2 * tw + 140;
+    this.scene = [
+      ['floor', 3, 'none'],
+      ['tube', 1, 'core', 'tubes'], ['fin', 2, 'core', 'fins'], ['chan', 0, 'core', null, [0, H / 2 + 1.2, 0]], ['chan', 0, 'core', null, [0, -H / 2 - 1.2, 0]],
+      ['header', 8, 'L', null, [-hx + 1.6, 0, 0]], ['header', 8, 'R', null, [hx - 1.6, 0, 0]],
+      ['tank', 0, 'L', null, [-(hx + tw / 2), 0, 0]], ['tank', 0, 'R', null, [hx + tw / 2, 0, 0]],
+      ['weld', 7, 'L', null, [-hx, 0, 0]], ['weld', 7, 'R', null, [hx, 0, 0]],
+      ['pipeL', 0, 'L'], ['pipeR', 0, 'R'], ['beadL', 0, 'L'], ['beadR', 0, 'R'], ['hoseL', 4, 'L'], ['hoseR', 4, 'R'], ['clampL', 8, 'L'], ['clampR', 8, 'R'],
+      ['neck', 0, 'R'], ['cap', 5, 'R'], ['nipple', 0, 'R'], ['brk', 0, 'B'], ['grom', 9, 'B'], ['bolt', 8, 'B']
+    ];
+    if (this.fanOn) this.scene.push(['shroud', 6, 'F'], ['rim', 6, 'F'], ['motor', 6, 'F'], ['strut', 6, 'F'], ['blade', 6, 'F', 'blades'], ['hub', 8, 'F', 'hubs']);
+  }
+  uploadTemps(p, r) {
+    const gl = this.gl, nx = r.nx, rows = r.rows, N = r.N, d = new Uint8Array(nx * rows * 4);
+    const tn = (T) => Math.max(0, Math.min(255, Math.round((T - p.TaIn) / Math.max(0.1, p.TcIn - p.TaIn) * 255)));
+    for (let k = 0; k < rows; k++) for (let i = 0; i < nx; i++) {
+      const a = Math.min(N - 1, Math.max(0, k - 1)), b = Math.min(N - 1, k), o = (k * nx + i) * 4;
+      d[o] = tn((r.mapC[a][i] + r.mapC[b][i]) / 2); d[o + 1] = tn((r.mapA[a][i] + r.mapA[b][i]) / 2); d[o + 2] = k < N ? tn(r.mapC[k][i]) : 0; d[o + 3] = 255;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.tTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, nx, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, d);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.tSize = [nx, rows];
+  }
+  groupOff(g) { const e = this.ex; return g === 'L' ? [-48 * e, 0, 0] : g === 'R' ? [48 * e, 0, 0] : g === 'F' ? [0, 0, -80 * e] : g === 'B' ? [0, -18 * e, 0] : [0, 0, 0]; }
+  // ---------- particles ----------
+  resetParticles() { if (!this.p) return; for (let i = 0; i < this.nAir; i++) this.spawnAir(i, true); for (let i = 0; i < this.nCool; i++) this.spawnCool(i, true); }
+  spawnAir(i, scatter) {
+    const p = this.p, a = this.air, W = p.W, H = this.coreH, zs = p.D / 2 + 170;
+    const x = (Math.random() - 0.5) * W * 1.02, y = (Math.random() - 0.5) * H * 1.02;
+    const z = scatter ? -p.D / 2 - 200 + Math.random() * (zs + p.D / 2 + 200) : zs + Math.random() * 20;
+    a.pos.set([x, y, z], i * 3); a.T[i] = p.TaIn; a.v[i] = 0.85 + Math.random() * 0.3; a.age[i] = 0;
+    for (let h = 0; h < this.H; h++) a.hist.set([x, y, z, p.TaIn], (i * this.H + h) * 4);
+  }
+  spawnCool(i, scatter) {
+    const s = this.cool.s; s[i * 3] = Math.floor(Math.random() * this.r.N); s[i * 3 + 1] = scatter ? Math.random() * 4 : 0; s[i * 3 + 2] = (Math.random() - 0.5) * (this.p.D - 8);
+    const q = this.coolPos(i); for (let h = 0; h < this.H; h++) this.cool.hist.set(q, (i * this.H + h) * 4);
+  }
+  coolPos(i) {
+    const s = this.cool.s, p = this.p, W = p.W, tw = this.tankW, hx = this.hx, e = this.ex * 48;
+    const t = s[i * 3] | 0, u = s[i * 3 + 1], z = s[i * 3 + 2], ty = this.tubeY[Math.min(t, this.tubeY.length - 1)];
+    const L = (a, b, k) => a + (b - a) * k, rc = this.r.mapC[Math.min(t, this.r.N - 1)];
+    const xl = -(hx + tw / 2) - e, xr = hx + tw / 2 + e;
+    if (u < 1) return [L(this.inlet[0] - 30 - e, xl, u), this.yIn, z * 0.25 * u, p.TcIn];
+    if (u < 1.5) { const k = (u - 1) / 0.5; return [xl + Math.sin(t * 7.1 + i) * 0.22 * tw, L(this.yIn, ty, k), z * L(0.25, 1, k), p.TcIn]; }
+    if (u < 3) { const k = (u - 1.5) / 1.5, x = L(xl, xr, k); const ix = Math.min(rc.length - 1, Math.floor(Math.max(0, Math.min(0.999, (x + W / 2) / W)) * rc.length)); return [x, ty, z, rc[ix]]; }
+    if (u < 3.5) { const k = (u - 3) / 0.5; return [xr + Math.cos(t * 5.3 + i) * 0.22 * tw, L(ty, this.yOut, k), z * L(1, 0.25, k), this.r.TcOut]; }
+    const k = (u - 3.5) / 0.5; return [L(xr, this.outlet[0] + 30 + e, k), this.yOut, z * 0.25 * (1 - k), this.r.TcOut];
+  }
+  update(dt) {
+    const p = this.p, r = this.r, a = this.air, slow = 1 / 30;
+    const Vup = Math.max(0.15, p.VfaceSolved) * 1000 * slow, Vcore = Vup / r.sigma;
+    const zf = p.D / 2, zb = -p.D / 2, H = this.coreH, W = p.W, fan = this.fanOn && this.fans, fz = fan ? this.fans[0][2] - 80 * this.ex : 0;
+    this.histT += dt; const push = this.histT > 0.04; if (push) this.histT = 0;
+    for (let i = 0; i < this.nAir; i++) {
+      const o = i * 3; let x = a.pos[o], y = a.pos[o + 1], z = a.pos[o + 2];
+      const tx = Math.min(r.nx - 1, Math.max(0, Math.floor((x + W / 2) / W * r.nx))), ty = Math.min(r.N - 1, Math.max(0, Math.floor((y + H / 2) / H * r.N)));
+      const Tout = r.mapA[ty][tx];
+      let v = (z > zf ? Vup : z > zb ? Vcore : Vup * 1.1) * a.v[i];
+      if (z > zf) { a.T[i] = p.TaIn; z -= v * dt; }
+      else if (z > zb) { const k = (zf - z) / p.D; a.T[i] = p.TaIn + (Tout - p.TaIn) * (1 - Math.exp(-3 * k)) / (1 - Math.exp(-3)); z -= v * dt; }
+      else {
+        a.T[i] = Tout;
+        if (fan) {
+          let best = this.fans[0]; for (const f of this.fans) if (Math.abs(f[0] - x) < Math.abs(best[0] - x)) best = f;
+          const dx = x - best[0], dy = y - best[1], rr = Math.hypot(dx, dy) + 1e-3, beyond = z < fz;
+          const pull = beyond ? 0.12 : -0.7, sw = beyond ? 0.55 : 0.9;
+          x += (dx / rr * pull * v - dy / rr * sw * v * 0.6) * dt; y += (dy / rr * pull * v + dx / rr * sw * v * 0.6) * dt; z -= v * 1.3 * dt;
+        } else { x += x * 0.0015 * v * dt; y += (y * 0.0015 + 0.02) * v * dt; z -= v * dt; }
+      }
+      a.pos[o] = x; a.pos[o + 1] = y; a.pos[o + 2] = z;
+      a.al[i] = Math.min(1, Math.max(0, (p.D / 2 + 170 - z) / 70)) * Math.min(1, Math.max(0, (z - (zb - 240)) / 120));
+      if (push) { const hb = i * this.H * 4; a.hist.copyWithin(hb + 4, hb, hb + (this.H - 1) * 4); a.hist.set([x, y, z, a.T[i]], hb); }
+      if (z < zb - 240) this.spawnAir(i, false);
+    }
+    const s = this.cool.s, du = Math.max(0.04, r.Vi) * 1000 * slow * 1.6 * dt / (W / 1.5);
+    for (let i = 0; i < this.nCool; i++) {
+      s[i * 3 + 1] += du * (s[i * 3 + 1] < 1.5 || s[i * 3 + 1] > 3 ? 1.4 : 1);
+      if (s[i * 3 + 1] >= 4) { this.spawnCool(i, false); continue; }
+      if (push) { const hb = i * this.H * 4; this.cool.hist.copyWithin(hb + 4, hb, hb + (this.H - 1) * 4); this.cool.hist.set(this.coolPos(i), hb); }
+    }
+  }
+  ribbons(hist, n, headPos, al) {
+    // build segment quads from history; returns Float32Array of [P(3) Q(3) S(3)] * 6 per segment
+    const Hn = this.H, segs = Hn - 1, out = this.ribOut && this.ribOut.length >= n * segs * 54 ? this.ribOut : (this.ribOut = new Float32Array(n * segs * 54));
+    let k = 0;
+    for (let i = 0; i < n; i++) {
+      const hb = i * Hn * 4;
+      for (let s = 0; s < segs; s++) {
+        const a = hb + s * 4, b = hb + (s + 1) * 4;
+        const ax = s === 0 && headPos ? headPos[i * 3] : hist[a], ay = s === 0 && headPos ? headPos[i * 3 + 1] : hist[a + 1], az = s === 0 && headPos ? headPos[i * 3 + 2] : hist[a + 2];
+        const bx = hist[b], by = hist[b + 1], bz = hist[b + 2];
+        if (Math.abs(ax - bx) + Math.abs(ay - by) + Math.abs(az - bz) < 0.05) continue;
+        const k0 = al ? al[i] : 1; if (k0 < 0.01) continue; const fa = (1 - s / segs) * k0, fb = (1 - (s + 1) / segs) * k0, Ta = hist[a + 3], Tb = hist[b + 3];
+        const V = [[ax, ay, az, bx, by, bz, -1, Ta, fa], [ax, ay, az, bx, by, bz, 1, Ta, fa], [bx, by, bz, ax + 2 * (bx - ax), ay + 2 * (by - ay), az + 2 * (bz - az), 1, Tb, fb],
+          [ax, ay, az, bx, by, bz, -1, Ta, fa], [bx, by, bz, ax + 2 * (bx - ax), ay + 2 * (by - ay), az + 2 * (bz - az), 1, Tb, fb], [bx, by, bz, ax + 2 * (bx - ax), ay + 2 * (by - ay), az + 2 * (bz - az), -1, Tb, fb]];
+        for (const q of V) { out.set(q, k); k += 9; }
+      }
+    }
+    return [out, k / 9];
+  }
+  // ---------- drawing ----------
+  bindMesh(m, prog) {
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.p); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.n); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(1, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.u); gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(2, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.i);
+  }
+  drawItem(it, prog, pass, mirror) {
+    const gl = this.gl, [name, kind, group, special, off] = it, m = this.M[name]; if (!m) return;
+    if (name === 'floor' && (prog === this.dprog || mirror)) return;
+    const go = this.groupOff(group), o = off || [0, 0, 0];
+    let cnt = 1, base = 0;
+    if (special === 'tubes') { cnt = this.tubeInst; base = 0; }
+    if (special === 'fins') { cnt = this.finInst; base = this.tubeInst; }
+    const u = prog.u;
+    if (u.uKind) gl.uniform1i(u.uKind, kind);
+    if (u.uCutMode) gl.uniform1i(u.uCutMode, this.cutaway && (special === 'tubes' || special === 'fins' || (group === 'R' && kind !== 4)) ? 1 : 0);
+    if (name === 'floor') { gl.uniformMatrix4fv(u.uModel, false, M4.tr(0, this.floorY, 0)); this.bindMesh(m); gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4); gl.vertexAttrib3f(3, 0, 0, 0); gl.vertexAttrib4f(4, 0, 0, 0, 0); gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0); return; }
+    this.bindMesh(m);
+    if (special === 'tubes' || special === 'fins') {
+      gl.uniformMatrix4fv(u.uModel, false, M4.tr(go[0] + o[0], go[1] + o[1], go[2] + o[2]));
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf);
+      gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 3, gl.FLOAT, false, 28, base * 28); gl.vertexAttribDivisor(3, 1);
+      gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 28, base * 28 + 12); gl.vertexAttribDivisor(4, 1);
+      gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, cnt);
+      gl.vertexAttribDivisor(3, 0); gl.vertexAttribDivisor(4, 0); gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4);
+      return;
+    }
+    gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4); gl.vertexAttrib3f(3, 0, 0, 0); gl.vertexAttrib4f(4, 0, 0, 0, 0);
+    if (special === 'blades' || special === 'hubs') {
+      for (const f of this.fans) {
+        const T = M4.tr(f[0] + go[0], f[1] + go[1], f[2] + go[2] + (special === 'hubs' ? -6 : 0));
+        gl.uniformMatrix4fv(u.uModel, false, special === 'blades' ? M4.mul(T, M4.rz(this.fanAng)) : T);
+        gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
+      }
+      return;
+    }
+    gl.uniformMatrix4fv(u.uModel, false, M4.tr(go[0] + o[0], go[1] + o[1], go[2] + o[2]));
+    gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
+  }
+  render() {
+    if (!this.ok || !this.p || !this.M) return;
+    const gl = this.gl, cv = this.cv, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const Wc = Math.max(1, Math.round(cv.clientWidth * dpr)), Hc = Math.max(1, Math.round(cv.clientHeight * dpr));
+    if (cv.width !== Wc || cv.height !== Hc) { cv.width = Wc; cv.height = Hc; }
+    const aspect = Wc / Hc, fov = 0.5;
+    const hf = Math.atan(Math.tan(fov / 2) * aspect);
+    const fitW = (this.modelW / 2) / Math.tan(hf), fitH = ((this.coreH + 120) / 2) / Math.tan(fov / 2);
+    const dist = Math.max(fitW, fitH) * (aspect < 1 ? 0.9 : 1.24) * this.zoom;
+    const cy = Math.cos(this.pitch), eye = [Math.sin(this.yaw) * cy * dist, Math.sin(this.pitch) * dist, Math.cos(this.yaw) * cy * dist];
+    const tgt = [0, -this.coreH * 0.06, 0];
+    eye[1] += tgt[1];
+    const V = M4.look(eye, tgt, [0, 1, 0]), Pm = M4.persp(fov, aspect, 20, dist * 6), VP = M4.mul(Pm, V);
+    this.VP = VP; this.eye = eye; this.Wc = Wc; this.Hc = Hc; this.dpr = dpr;
+    // shadow pass
+    const ext = this.modelW * 0.62 + 60, L = this.Ldir, le = [L[0] * 900, L[1] * 900, L[2] * 900];
+    const LV = M4.mul(M4.ortho(-ext, ext, -ext, ext, 100, 1900), M4.look(le, [0, 0, 0], [0, 1, 0]));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shFB); gl.viewport(0, 0, this.SM, this.SM);
+    gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.BLEND); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(this.dprog); gl.uniformMatrix4fv(this.dprog.u.uVP, false, LV); gl.uniform1f(this.dprog.u.uMirror, 0);
+    for (const it of this.scene) this.drawItem(it, this.dprog, 0, false);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, Wc, Hc);
+    gl.clearColor(0.043, 0.052, 0.068, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    const P = this.prog, u = P.u, p = this.p;
+    gl.useProgram(P);
+    gl.uniformMatrix4fv(u.uVP, false, VP); gl.uniform3fv(u.uCam, eye); gl.uniform1f(u.uThermal, this.thermal);
+    gl.uniform1f(u.uTaIn, p.TaIn); gl.uniform1f(u.uTcIn, p.TcIn); gl.uniform1f(u.uW, p.W); gl.uniform1f(u.uD, p.D); gl.uniform1f(u.uLp, p.Lp); gl.uniform1f(u.uTheta, p.theta);
+    gl.uniform1f(u.uFloorY, this.floorY); gl.uniform1f(u.uCut, this.cutaway ? p.W * 0.06 : 1e6); gl.uniform3fv(u.uLdir, L); gl.uniformMatrix4fv(u.uLightVP, false, LV);
+    gl.uniform1f(u.uEtaF, this.r.etaF); gl.uniform2fv(u.uTempSize, this.tSize);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.shTex); gl.uniform1i(u.uShadow, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.tTex); gl.uniform1i(u.uTemp, 1);
+    gl.uniform1i(u.uPass, 0);
+    // mirrored reflection pass
+    gl.uniform1f(u.uMirror, 1);
+    for (const it of this.scene) if (it[1] !== 2) this.drawItem(it, P, 0, true);
+    gl.uniform1f(u.uMirror, 0);
+    // floor (blended over reflection)
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    this.drawItem(this.scene[0], P, 0, false);
+    gl.disable(gl.BLEND);
+    for (const it of this.scene) if (it[0] !== 'floor') { const fin = it[3] === 'fins'; if (fin) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE); this.drawItem(it, P, 0, false); if (fin) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE); }
+    // translucent cutaway pass
+    gl.enable(gl.BLEND); gl.depthMask(false);
+    if (this.cutaway) {
+      gl.uniform1i(u.uPass, 1);
+      for (const it of this.scene) if (it[3] === 'tubes' || (it[2] === 'R' && (it[0] === 'tank' || it[0] === 'header'))) this.drawItem(it, P, 1, false);
+      gl.uniform1i(u.uPass, 0);
+      this.drawRibbons(this.cool.hist, this.nCool, null, 3.2);
+    }
+    if (this.showAir) this.drawRibbons(this.air.hist, this.nAir, this.air.pos, 1.7, this.air.al);
+    gl.depthMask(true); gl.disable(gl.BLEND);
+    this.placeLabels();
+  }
+  drawRibbons(hist, n, head, wid, al) {
+    const gl = this.gl, R = this.rprog, [buf, nv] = this.ribbons(hist, n, head, al);
+    if (!nv) return;
+    gl.useProgram(R); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniformMatrix4fv(R.u.uVP, false, this.VP); gl.uniform2f(R.u.uRes, this.Wc / 2, this.Hc / 2); gl.uniform1f(R.u.uWid, wid * this.dpr);
+    gl.uniform1f(R.u.uTa, this.p.TaIn); gl.uniform1f(R.u.uTc, this.p.TcIn);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.ribBuf); gl.bufferData(gl.ARRAY_BUFFER, buf.subarray(0, nv * 9), gl.STREAM_DRAW);
+    for (let i = 0; i < 3; i++) { gl.enableVertexAttribArray(i); gl.vertexAttribDivisor(i, 0); gl.vertexAttribPointer(i, 3, gl.FLOAT, false, 36, i * 12); }
+    gl.disableVertexAttribArray(3); gl.disableVertexAttribArray(4);
+    gl.drawArrays(gl.TRIANGLES, 0, nv);
+    gl.useProgram(this.prog);
+  }
+  project(pt) {
+    const m = this.VP, x = pt[0], y = pt[1], z = pt[2];
+    const cx = m[0] * x + m[4] * y + m[8] * z + m[12], cy = m[1] * x + m[5] * y + m[9] * z + m[13], cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+    return [(cx / cw * 0.5 + 0.5) * this.Wc / this.dpr, (1 - (cy / cw * 0.5 + 0.5)) * this.Hc / this.dpr, cw];
+  }
+  placeLabels() {
+    if (!this.labelsEl || !this.p) return;
+    const p = this.p, e = this.ex * 48;
+    const pts = { lin: [this.inlet[0] - 14 - e, this.yIn + 14, 0], lout: [this.outlet[0] + 14 + e, this.yOut + 14, 0], lair: [-p.W * 0.25, this.coreH * 0.32, p.D / 2 + 70], lexh: [p.W * 0.18, this.coreH / 2 + 26, -p.D / 2 - 90] };
+    for (const id in pts) {
+      const el = this.labelsEl.querySelector('[data-k=' + id + ']'); if (!el) continue;
+      const [x, y, w] = this.project(pts[id]);
+      const behind = (id === 'lair' && this.eye[2] < 0) || (id === 'lexh' && this.eye[2] > 0 && false);
+      const vis = !behind && w > 0 && x > 40 && x < this.Wc / this.dpr - 40 && y > 50 && y < this.Hc / this.dpr - 10;
+      el.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+      el.style.opacity = vis ? 1 : 0;
+    }
+  }
+  frame(dt) {
+    if (!this.p || !this.M) return;
+    if (this.autoSpin) this.yaw += dt * 0.1; else { this.yaw += this.vy * 0.0001 * 0; }
+    this.ex += (this.explode - this.ex) * Math.min(1, dt * 4);
+    if (this.fanOn) this.fanAng -= dt * 10;
+    this.t += dt; this.update(dt); this.render();
+  }
+}
+</script>
+<script>{
+const $ = (id) => document.getElementById(id);
+const DEF = { mode: 'drive', speed: 50, Cp: 0.6, fan: true, fanP: 200, fanQ: 0.2, Vface: 5, TaIn: 35, alt: 990, TcIn: 60, flow: 10, cool: 'water', load: 2.0,
+  theta: 27, Fp: 1.5, Lp: 1.2, Fl: 8, df: 0.1, W: 235, H: 114.3, D: 50.8, Th: 1.8, tw: 0.3 };
+let S = { ...DEF }, units = 'si';
+try { const sv = JSON.parse(localStorage.getItem('radlab.v1') || 'null'); if (sv && sv.S) { S = { ...DEF, ...sv.S }; units = sv.units === 'us' ? 'us' : 'si'; } } catch (e) {}
+const save = () => { try { localStorage.setItem('radlab.v1', JSON.stringify({ S, units })); } catch (e) {} };
+
+// ---------- units ----------
+const id_ = (v) => v;
+const Q = {
+  temp: { si: ['°C', id_, id_], us: ['°F', (v) => v * 9 / 5 + 32, (v) => (v - 32) * 5 / 9] },
+  dT: { si: ['°C', id_, id_], us: ['°F', (v) => v * 9 / 5, (v) => v * 5 / 9] },
+  spd: { si: ['km/h', id_, id_], us: ['mph', (v) => v / 1.609344, (v) => v * 1.609344] },
+  len: { si: ['mm', id_, id_], us: ['in', (v) => v / 25.4, (v) => v * 25.4] },
+  flowL: { si: ['L/min', id_, id_], us: ['gpm', (v) => v / 3.78541, (v) => v * 3.78541] },
+  press: { si: ['Pa', id_, id_], us: ['inH₂O', (v) => v / 249.089, (v) => v * 249.089] },
+  kpa: { si: ['kPa', (v) => v / 1000, (v) => v * 1000], us: ['psi', (v) => v / 6894.76, (v) => v * 6894.76] },
+  vel: { si: ['m/s', id_, id_], us: ['ft/s', (v) => v * 3.28084, (v) => v / 3.28084] },
+  vflow: { si: ['m³/h', (v) => v * 3600, (v) => v / 3600], us: ['CFM', (v) => v * 2118.88, (v) => v / 2118.88] },
+  kw: { si: ['kW', id_, id_], us: ['kW', id_, id_] },
+  deg: { si: ['°', id_, id_], us: ['°', id_, id_] },
+  none: { si: ['', id_, id_], us: ['', id_, id_] }
+};
+const conv = (q, v) => Q[q][units][1](v), unconv = (q, v) => Q[q][units][2](v), uname = (q) => Q[q][units][0];
+const fx = (v, d) => (Math.abs(v) < 1e-9 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const F = (q, v, dSI, dUS) => fx(conv(q, v), units === 'si' ? dSI : (dUS ?? dSI)) + (uname(q) ? (uname(q).startsWith('°') ? '' : ' ') + uname(q) : '');
+
+// ---------- controls ----------
+const isDrive = () => S.mode === 'drive';
+const C = [
+  { id: 'speed', g: 'air', l: 'Vehicle speed', q: 'spd', min: 0, max: 130, step: 1, d: [0, 0], show: isDrive },
+  { id: 'Cp', g: 'air', l: 'Duct pressure recovery', q: 'none', min: 0.1, max: 0.95, step: 0.01, d: [2, 2], show: isDrive, sub: 'Share of the car’s dynamic pressure that reaches the core face' },
+  { id: 'fan', g: 'air', type: 'toggle', l: 'Radiator fan', show: isDrive },
+  { id: 'fanP', g: 'air', l: 'Fan shutoff pressure', q: 'press', min: 40, max: 600, step: 5, d: [0, 2], show: () => isDrive() && S.fan },
+  { id: 'fanQ', g: 'air', l: 'Fan free-air flow', q: 'vflow', min: 0.03, max: 0.6, step: 0.005, d: [0, 0], show: () => isDrive() && S.fan, sub: 'Example fan curve: enter your fan’s datasheet values' },
+  { id: 'Vface', g: 'air', l: 'Face velocity', q: 'vel', min: 0.3, max: 15, step: 0.1, d: [1, 1], show: () => !isDrive() },
+  { id: 'TaIn', g: 'air', l: 'Ambient air', q: 'temp', min: 5, max: 48, step: 0.5, d: [1, 0] },
+  { id: 'alt', g: 'air', type: 'select', l: 'Site', opts: [[990, 'Lubbock, TX (990 m)'], [300, 'Michigan Intl. Speedway (about 300 m)'], [0, 'Sea level'], [1610, 'Denver, CO (1,610 m)']] },
+  { id: 'TcIn', g: 'cool', l: 'Coolant into radiator', q: 'temp', min: 30, max: 95, step: 0.5, d: [1, 0] },
+  { id: 'flow', g: 'cool', l: 'Coolant flow', q: 'flowL', min: 1, max: 30, step: 0.5, d: [1, 2] },
+  { id: 'cool', g: 'cool', type: 'select', l: 'Coolant', opts: [['water', 'Water'], ['eg50', '50/50 glycol (comparison only)']] },
+  { id: 'load', g: 'cool', l: 'Heat load to reject', q: 'kw', min: 0.2, max: 12, step: 0.1, d: [1, 1], sub: 'Motor + inverter losses you need this radiator to carry' },
+  { id: 'theta', g: 'fins', l: 'Louver angle', q: 'deg', min: 12, max: 36, step: 0.5, d: [1, 1] },
+  { id: 'Fp', g: 'fins', l: 'Fin pitch', q: 'len', min: 0.8, max: 3, step: 0.05, d: [2, 3], sub: () => fx(25.4 / S.Fp, 1) + ' fins per inch' },
+  { id: 'Lp', g: 'fins', l: 'Louver pitch', q: 'len', min: 0.7, max: 2, step: 0.05, d: [2, 3] },
+  { id: 'Fl', g: 'fins', l: 'Fin height (tube gap)', q: 'len', min: 4, max: 12, step: 0.1, d: [1, 3] },
+  { id: 'df', g: 'fins', l: 'Fin thickness', q: 'len', min: 0.05, max: 0.2, step: 0.005, d: [3, 4] },
+  { id: 'W', g: 'core', l: 'Core width (tube length)', q: 'len', min: 100, max: 600, step: 1, d: [0, 2] },
+  { id: 'H', g: 'core', l: 'Core height', q: 'len', min: 60, max: 400, step: 0.5, d: [1, 2] },
+  { id: 'D', g: 'core', l: 'Core depth (airflow)', q: 'len', min: 16, max: 80, step: 0.5, d: [1, 2] },
+  { id: 'Th', g: 'core', l: 'Tube height', q: 'len', min: 1, max: 3, step: 0.05, d: [2, 3] },
+  { id: 'tw', g: 'core', l: 'Tube wall', q: 'len', min: 0.15, max: 0.5, step: 0.01, d: [2, 3] }
+];
+const TABS = [['air', 'Air'], ['cool', 'Coolant'], ['fins', 'Fins'], ['core', 'Core']];
+let tab = 'air';
+const rows = {}; // id -> [row elements]
+function makeRow(c) {
+  const el = document.createElement('div');
+  if (c.type === 'toggle') {
+    el.className = 'toggle';
+    el.innerHTML = `<label for="tg_${c.id}_${Math.random().toString(36).slice(2, 6)}">${c.l}</label><button class="sw" aria-label="${c.l}"></button>`;
+    const b = el.querySelector('button'); b.id = el.querySelector('label').htmlFor;
+    b.addEventListener('click', () => { S[c.id] = !S[c.id]; changed(c.id); });
+    el.sync = () => b.setAttribute('aria-pressed', S[c.id] ? 'true' : 'false');
+  } else if (c.type === 'select') {
+    el.className = 'row';
+    const sid = 'sel_' + c.id + Math.random().toString(36).slice(2, 6);
+    el.innerHTML = `<label for="${sid}">${c.l}</label><span></span><select id="${sid}" style="grid-column:1/-1">${c.opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
+    const s = el.querySelector('select');
+    s.addEventListener('change', () => { S[c.id] = typeof c.opts[0][0] === 'number' ? +s.value : s.value; changed(c.id); });
+    el.sync = () => { s.value = String(S[c.id]); };
+  } else {
+    el.className = 'row';
+    const nid = 'n_' + c.id + Math.random().toString(36).slice(2, 6);
+    el.innerHTML = `<label for="${nid}">${c.l}</label><div class="num"><input id="${nid}" inputmode="decimal" autocomplete="off"><em></em></div><input type="range" aria-label="${c.l}" min="${c.min}" max="${c.max}" step="${c.step}">${c.sub ? '<div class="sub"></div>' : ''}`;
+    const num = el.querySelector('.num input'), rng = el.querySelector('input[type=range]'), em = el.querySelector('em'), sub = el.querySelector('.sub');
+    rng.addEventListener('input', () => { S[c.id] = +rng.value; changed(c.id, el); });
+    const commit = () => {
+      let v = parseFloat(num.value.replace(/,/g, ''));
+      if (!isFinite(v)) { el.sync(); return; }
+      v = unconv(c.q, v); v = Math.max(c.min, Math.min(c.max, v));
+      S[c.id] = v; changed(c.id);
+    };
+    num.addEventListener('change', commit);
+    num.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commit(); num.blur(); } });
+    el.sync = (skipNum) => {
+      rng.value = S[c.id];
+      rng.style.setProperty('--p', ((S[c.id] - c.min) / (c.max - c.min) * 100).toFixed(1) + '%');
+      if (document.activeElement !== num) num.value = fx(conv(c.q, S[c.id]), units === 'si' ? c.d[0] : c.d[1]).replace(/,/g, '');
+      em.textContent = uname(c.q);
+      if (sub) sub.textContent = typeof c.sub === 'function' ? c.sub() : c.sub;
+    };
+  }
+  el.def = c;
+  (rows[c.id] = rows[c.id] || []).push(el);
+  return el;
+}
+function buildTabs() {
+  $('tabs').innerHTML = TABS.map(([k, t]) => `<button role="tab" data-t="${k}" aria-pressed="${k === tab}">${t}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.t; buildTabs(); renderCtl(); }));
+}
+const ctlEls = C.map((c) => makeRow(c));
+const modeEl = document.createElement('div');
+modeEl.className = 'seg'; modeEl.setAttribute('role', 'group'); modeEl.setAttribute('aria-label', 'Airflow source');
+modeEl.innerHTML = '<button data-m="drive">Drive it</button><button data-m="tunnel">Wind tunnel</button>';
+modeEl.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { S.mode = b.dataset.m; changed('mode'); }));
+function renderCtl() {
+  const box = $('ctl'); box.innerHTML = '';
+  if (tab === 'air') box.appendChild(modeEl);
+  ctlEls.forEach((el) => { if (el.def.g === tab && (!el.def.show || el.def.show())) box.appendChild(el); });
+  syncAll();
+}
+const miniIds = ['theta', 'Fp', 'Lp'];
+function renderMini() {
+  const box = $('miniCtl'); box.innerHTML = '';
+  for (const id of [...miniIds, isDrive() ? 'speed' : 'Vface']) box.appendChild(makeRowCached(id));
+  syncAll();
+}
+const miniCache = {};
+function makeRowCached(id) { return miniCache[id] || (miniCache[id] = makeRow(C.find((c) => c.id === id))); }
+function syncAll() {
+  for (const id in rows) for (const el of rows[id]) el.sync();
+  modeEl.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.m === S.mode));
+  $('uSI').setAttribute('aria-pressed', units === 'si'); $('uUS').setAttribute('aria-pressed', units === 'us');
+}
+
+// ---------- presets ----------
+const PRE = [
+  ['Endurance at Michigan', { mode: 'drive', speed: 55, fan: true, TaIn: 29, alt: 300, TcIn: 60, flow: 12, load: 3 }],
+  ['Lubbock autocross, July', { mode: 'drive', speed: 45, fan: true, TaIn: 38, alt: 990, TcIn: 62, flow: 12, load: 2.5 }],
+  ['Pit lane, fan only', { mode: 'drive', speed: 0, fan: true, TaIn: 35, alt: 990 }],
+  ['Wind tunnel, 5 m/s', { mode: 'tunnel', Vface: 5 }]
+];
+$('presets').innerHTML = PRE.map(([n], i) => `<button class="btn" data-p="${i}">${n}</button>`).join('');
+$('presets').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { Object.assign(S, PRE[+b.dataset.p][1]); changed('preset'); }));
+
+// ---------- 3D ----------
+const R3 = new Radiator3D($('gl'), $('labels'));
+if (!R3.ok) { $('noGL').hidden = false; $('labels').hidden = true; }
+const segBtn = (a, b, on) => { $(a).setAttribute('aria-pressed', on); if (b) $(b).setAttribute('aria-pressed', !on); };
+$('vStudio').onclick = () => { R3.thermal = 0; segBtn('vStudio', 'vThermal', true); };
+$('vThermal').onclick = () => { R3.thermal = 1; segBtn('vThermal', 'vStudio', true); };
+$('vCut').onclick = () => { R3.cutaway = !R3.cutaway; segBtn('vCut', null, R3.cutaway); };
+$('vAir').onclick = () => { R3.showAir = !R3.showAir; segBtn('vAir', null, R3.showAir); };
+$('vSpin').onclick = () => { R3.autoSpin = !R3.autoSpin; segBtn('vSpin', null, R3.autoSpin); };
+$('vEx').onclick = () => { R3.explode = R3.explode ? 0 : 1; segBtn('vEx', null, !!R3.explode); };
+R3.onSpin = (v) => segBtn('vSpin', null, v);
+$('uSI').onclick = () => { units = 'si'; changed('units'); };
+$('uUS').onclick = () => { units = 'us'; changed('units'); };
+
+// ---------- solve ----------
+let P = null, R = null, lastGeoKey = '';
+function solve() {
+  const p = { ...S };
+  const V = operatingPoint(p);
+  p.Vface = V; p.VfaceSolved = V;
+  R = solveRadiator(p); P = p;
+  // equilibrium inlet temperature for the load (UA and capacities nearly independent of temperature)
+  const perK = R.Q / Math.max(0.01, p.TcIn - p.TaIn);
+  R.Teq = p.TaIn + p.load * 1000 / Math.max(1e-6, perK);
+  R.perK = perK;
+}
+function show() {
+  const p = P, r = R, kW = r.Q / 1000;
+  const sp = isDrive() ? F('spd', p.speed, 0) : F('vel', p.Vface, 1) + ' face velocity';
+  $('title').textContent = isDrive()
+    ? `At ${F('spd', p.speed, 0)}${p.fan ? ' with the fan on' : ', fan off'}, this core rejects ${fx(kW, 2)} kW`
+    : `At ${F('vel', p.Vface, 1)} through the face, this core rejects ${fx(kW, 2)} kW`;
+  const pct = kW / p.load * 100;
+  if (p.TcIn - p.TaIn < 0.5) {
+    $('title').textContent = 'The coolant is no hotter than the air, so nothing is rejected';
+    $('lede').textContent = 'Raise the coolant temperature or lower the ambient temperature to see the radiator work.';
+  } else $('lede').innerHTML = (pct >= 100
+    ? `Enough for your <b>${fx(p.load, 1)} kW</b> heat load with <b>${fx(pct - 100, 0)}% margin</b>. `
+    : `That is <b>${fx(pct, 0)}%</b> of your <b>${fx(p.load, 1)} kW</b> heat load, so the loop would heat up until the coolant reaches about <b>${F('temp', r.Teq, 0)}</b> at the radiator inlet. `)
+    + `Coolant leaves at <b>${F('temp', r.TcOut, 1)}</b> and the air leaves <b>${F('dT', r.TaOut - p.TaIn, 1)}</b> warmer.`;
+  $('bQ').innerHTML = `${fx(kW, 2)}<small>kW</small>`;
+  const scale = Math.max(kW, p.load) * 1.15;
+  $('mQ').style.width = (kW / scale * 100).toFixed(1) + '%'; $('mL').style.left = (p.load / scale * 100).toFixed(1) + '%';
+  $('stat').innerHTML = p.TcIn - p.TaIn < 0.5 ? 'No temperature difference to drive heat out' : pct >= 100 ? `<b class="good">Holds the ${fx(p.load, 1)} kW load</b> at ${F('temp', p.TcIn, 0)} inlet · ${units === 'us' ? fx(r.perK / 1.8, 0) + ' W per °F' : fx(r.perK, 0) + ' W per °C'} of inlet temperature difference`
+    : `<b class="bad">Short ${fx(p.load - kW, 2)} kW</b> at ${F('temp', p.TcIn, 0)} inlet · settles near ${F('temp', r.Teq, 0)}`;
+  $('fTc').textContent = F('temp', r.TcOut, 1); $('fTa').textContent = F('temp', r.TaOut, 1);
+  $('fV').textContent = F('vel', p.Vface, 2); $('fdP').textContent = F('press', r.dPair, 0, 2);
+  $('fE').textContent = fx(r.eps, 2); $('fdPc').textContent = F('kpa', r.dPcool, 2, 2);
+  $('sQ').textContent = fx(kW, 2) + ' kW'; $('sT').textContent = F('temp', r.TcOut, 1);
+  $('lIn').textContent = F('temp', p.TcIn, 1); $('lOut').textContent = F('temp', r.TcOut, 1);
+  $('lAir').textContent = F('temp', p.TaIn, 1); $('lVel').textContent = F('vel', p.Vface, 1); $('lExh').textContent = F('temp', r.TaOut, 1);
+  $('cLo').textContent = F('temp', p.TaIn, 0); $('cHi').textContent = F('temp', p.TcIn, 0);
+  $('coreChip').textContent = units === 'us' ? `${fx(p.W / 25.4, 2)} × ${fx(p.H / 25.4, 2)} × ${fx(p.D / 25.4, 2)} in core` : `${fx(p.W, 0)} × ${fx(p.H, 0)} × ${fx(p.D, 1)} mm core`;
+  if (R3.ok) { R3.fanOn = isDrive() && p.fan; R3.setModel(p, r); }
+  tables(); flags(); deltas();
+}
+
+// ---------- baseline compare ----------
+let base = null;
+try { base = JSON.parse(localStorage.getItem('radlab.base') || 'null'); } catch (e) {}
+function deltas() {
+  const r = R, p = P;
+  const cur = { Q: r.Q, TcOut: r.TcOut, TaOut: r.TaOut, V: p.Vface, dP: r.dPair, eps: r.eps, dPc: r.dPcool };
+  const set = (id, txt, good) => { const e = $(id); e.textContent = txt; e.className = txt ? (good ? 'up' : 'dn') : ''; };
+  if (!base) { for (const k of ['fTc', 'fTa', 'fV', 'fdP', 'fE', 'fdPc']) set(k + 'd', ''); $('pin').textContent = 'Pin as baseline'; $('pinNote').textContent = 'Pin a design, then change anything to compare.'; return; }
+  const sg = (v, d) => (v >= 0 ? '+' : '−') + fx(Math.abs(v), d);
+  const dq = (cur.Q - base.Q) / 1000;
+  $('pin').textContent = 'Clear baseline';
+  $('pinNote').innerHTML = `vs baseline: <b style="color:${dq >= 0 ? 'var(--ok)' : '#ff6a6f'}">${sg(dq, 2)} kW</b> (${sg(dq / (base.Q / 1000) * 100, 1)}%)`;
+  const dT = (v) => units === 'us' ? v * 1.8 : v, tu = units === 'us' ? '°F' : '°C';
+  set('fTcd', sg(dT(cur.TcOut - base.TcOut), 1) + tu, cur.TcOut <= base.TcOut);
+  set('fTad', sg(dT(cur.TaOut - base.TaOut), 1) + tu, cur.TaOut >= base.TaOut);
+  set('fVd', sg(conv('vel', cur.V) - conv('vel', base.V), 2) + ' ' + uname('vel'), cur.V >= base.V);
+  set('fdPd', sg((cur.dP - base.dP) / base.dP * 100, 0) + '%', cur.dP <= base.dP);
+  set('fEd', sg(cur.eps - base.eps, 3), cur.eps >= base.eps);
+  set('fdPcd', sg((cur.dPc - base.dPc) / base.dPc * 100, 0) + '%', cur.dPc <= base.dPc);
+}
+$('pin').onclick = () => {
+  base = base ? null : { Q: R.Q, TcOut: R.TcOut, TaOut: R.TaOut, V: P.Vface, dP: R.dPair, eps: R.eps, dPc: R.dPcool };
+  try { localStorage.setItem('radlab.base', JSON.stringify(base)); } catch (e) {}
+  deltas();
+};
+
+// ---------- tables & flags ----------
+function tables() {
+  const p = P, r = R;
+  const T = [
+    ['Geometry', [['Tubes / fin rows', `${r.N} / ${r.rows}`], ['Fins per row', fx(r.nf, 0) + ` (${fx(25.4 / p.Fp, 1)} FPI)`], ['Frontal area', fx(r.Afr * 1e4, 1) + ' cm²'], ['Free-flow ratio σ', fx(r.sigma, 3)],
+      ['Air-side area (fins + tubes)', fx(r.A, 2) + ' m²'], ['Fin share of area', fx(r.Afin / r.A * 100, 0) + '%'], ['Air hydraulic diameter', F('len', r.Dh * 1000, 2, 3)], ['Coolant-side area', fx(r.Ai, 3) + ' m²']]],
+    ['Air side', [['Air density', fx(r.air.rho, 3) + ' kg/m³'], ['Site pressure', fx(r.P / 1000, 1) + ' kPa'], ['Mass flow', fx(r.mA * 1000, 1) + ' g/s'], ['Face / core velocity', `${F('vel', p.Vface, 2)} / ${F('vel', r.Vc, 2)}`],
+      ['Re (louver pitch)', fx(r.ReLp, 0)], ['Colburn j', fx(r.j, 4)], ['Fanning f', fx(r.f, 3)], ['h, air', fx(r.hA, 0) + ' W/m²K'], ['Fin efficiency / surface eff.', `${fx(r.etaF, 3)} / ${fx(r.eta0, 3)}`],
+      ['Core ΔP', F('press', r.dPair, 0, 2)], ['Air power through core', fx(r.airPower, 1) + ' W']]],
+    ['Coolant side', [['Mass flow', fx(p.flow / 60000 * r.rhoC * 1000, 0) + ' g/s'], ['Velocity in tubes', F('vel', r.Vi, 3, 2)], ['Reynolds number', fx(r.Rei, 0) + (r.Rei < 2300 ? ' (laminar)' : r.Rei < 4000 ? ' (transitional)' : ' (turbulent)')],
+      ['Nusselt number', fx(r.Nui, 2)], ['h, coolant', fx(r.hi, 0) + ' W/m²K'], ['Tube hydraulic diameter', F('len', r.Dhi * 1000, 2, 3)], ['Core ΔP', F('kpa', r.dPcool, 2, 2)]]],
+    ['Overall', [['UA', fx(r.UA, 1) + ' W/K'], ['NTU / Cr', `${fx(r.NTU, 2)} / ${fx(r.Cr, 3)}`], ['Effectiveness ε', fx(r.eps, 3)], ['Air resistance share', fx((1 / (r.eta0 * r.hA * r.A)) / (1 / r.UA) * 100, 0) + '%'],
+      ['Heat rejected', fx(r.Q / 1000, 3) + ' kW'], ['Per degree of inlet temp. difference', units === 'us' ? fx(r.perK / 1.8, 1) + ' W/°F' : fx(r.perK, 1) + ' W/°C'], ['Coolant out', F('temp', r.TcOut, 2)], ['Air out, mean', F('temp', r.TaOut, 2)], ['Inlet temp to carry load', F('temp', r.Teq, 1)]]]
+  ];
+  $('tables').innerHTML = T.map(([h, rs]) => `<div class="card"><h3 style="margin-bottom:8px">${h}</h3><table><tbody>${rs.map(([k, v]) => `<tr><td>${k}</td><td class="n">${v}</td></tr>`).join('')}</tbody></table></div>`).join('');
+}
+function flags() {
+  const p = P, r = R, out = [];
+  if (r.ReLp < 100 || r.ReLp > 3000) out.push(`Re<sub>Lp</sub> = ${fx(r.ReLp, 0)} is outside the 100–3,000 range the j correlation was fitted on; heat transfer is extrapolated.`);
+  if (r.ReLp < 100 || r.ReLp > 600 || p.theta < 15 || p.theta > 29) out.push('Louver angle or Re<sub>Lp</sub> is outside the approximate test range of the friction correlation (about 15–29°, Re 100–600), so ΔP is less certain.');
+  if (p.D > 24) out.push(`Your ${F('len', p.D, 1, 2)} core is deeper than the approximately 16–24 mm cores behind the friction correlation; treat ΔP (and the solved airflow) as an estimate.`);
+  if (r.Rei > 2300 && r.Rei < 4000) out.push('Coolant flow is transitional (Re 2,300–4,000); the coolant-side coefficient is blended and uncertain.');
+  if (p.Fp / p.Lp < 0.6 || p.Fp / p.Lp > 2.2) out.push('Fin-to-louver pitch ratio is unusual for production louvered fins.');
+  if (p.cool === 'eg50') out.push('Glycol is shown for comparison. Check the current FSAE rules for what coolant your car may run.');
+  if (!out.length) out.push('All inputs sit inside the correlations’ typical ranges.');
+  $('flags').innerHTML = out.map((t, i) => `<div class="flag${out.length === 1 && t.startsWith('All') ? ' okf' : ''}">${t}</div>`).join('');
+}
+
+// ---------- charts ----------
+function chart(svg, cfg) {
+  svg._cfg = cfg;
+  if (!svg._ro) { svg._ro = new ResizeObserver(() => drawChart(svg)); svg._ro.observe(svg); }
+  drawChart(svg);
+}
+function drawChart(svg) {
+  const c = svg._cfg; if (!c) return;
+  const W = svg.clientWidth, H = svg.clientHeight; if (!W || !H) return;
+  const m = { l: 46, r: 16, t: 14, b: 38 };
+  const xs = c.xs, allY = c.series.flatMap((s) => s.ys).concat(c.hline != null ? [c.hline] : []);
+  let y0 = c.y0 ?? Math.min(0, ...allY), y1 = Math.max(...allY) * 1.12; if (y1 <= y0) y1 = y0 + 1;
+  const nice = (v) => { const e = Math.pow(10, Math.floor(Math.log10(v))); const f = v / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e; };
+  const ys = nice((y1 - y0) / 4);
+  y1 = Math.ceil(y1 / ys) * ys; y0 = Math.floor(y0 / ys) * ys;
+  const X = (v) => m.l + (v - xs[0]) / (xs[xs.length - 1] - xs[0]) * (W - m.l - m.r), Y = (v) => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  let s = '';
+  for (let v = y0; v <= y1 + 1e-9; v += ys) s += `<line class="ax" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke-opacity=".6"/><text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end">${c.yfmt ? c.yfmt(v) : fx(v, ys < 1 ? 1 : 0)}</text>`;
+  const xt = c.xticks || xs.filter((_, i) => i % Math.ceil(xs.length / (W < 420 ? 4 : 7)) === 0);
+  for (const v of xt) s += `<text x="${X(v)}" y="${H - m.b + 18}" text-anchor="middle">${c.xfmt ? c.xfmt(v) : fx(v, 0)}</text>`;
+  s += `<text x="${W - m.r}" y="${H - 4}" text-anchor="end">${c.xl}</text>`;
+  if (c.hline != null) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(c.hline)}" y2="${Y(c.hline)}" stroke="#e9eef4" stroke-dasharray="5 5" stroke-width="1.2"/><text x="${m.l + 6}" y="${Y(c.hline) - 7}" style="fill:#e9eef4">${c.hlabel}</text>`;
+  for (const sr of c.series) {
+    const d = sr.ys.map((v, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(v).toFixed(1)).join('');
+    if (sr.area) s += `<path d="${d}L${X(xs[xs.length - 1])} ${Y(y0)}L${X(xs[0])} ${Y(y0)}Z" fill="${sr.color}" fill-opacity=".12"/>`;
+    s += `<path d="${d}" fill="none" stroke="${sr.color}" stroke-width="${sr.w || 2.5}" stroke-linejoin="round"${sr.dash ? ` stroke-dasharray="${sr.dash}"` : ''}/>`;
+    if (sr.start) { s += `<text x="${X(xs[0]) + 6}" y="${Y(sr.ys[0]) + (sr.ys[0] >= Math.max(...c.series.map((q) => q.ys[0])) ? -9 : 19)}" style="fill:${sr.color}">${sr.name}</text>`; continue; }
+    const li = sr.labelAt ?? sr.ys.length - 1;
+    s += `<text x="${Math.min(W - m.r - 4, X(xs[li]))}" y="${Y(sr.ys[li]) + (sr.below ? 19 : -9)}" text-anchor="end" style="fill:${sr.color}">${sr.name}</text>`;
+  }
+  if (c.mark) s += `<circle cx="${X(c.mark[0])}" cy="${Y(c.mark[1])}" r="7" fill="#ef2b36" stroke="#0b0e13" stroke-width="3"/>`;
+  if (c.best) s += `<line x1="${X(c.best)}" x2="${X(c.best)}" y1="${m.t}" y2="${H - m.b}" stroke="#3ccf91" stroke-dasharray="3 4"/>`;
+  svg.innerHTML = s;
+}
+const qAt = (over) => { const p = { ...S, ...over }; const V = operatingPoint(p); return solveRadiator({ ...p, Vface: V, quick: true }); };
+function charts() {
+  const p = P;
+  if (isDrive()) {
+    const xs = []; for (let v = 0; v <= 130; v += 5) xs.push(v);
+    const on = xs.map((v) => qAt({ speed: v, fan: true }).Q / 1000), off = xs.map((v) => qAt({ speed: v, fan: false }).Q / 1000);
+    const cross = (arr) => { const i = arr.findIndex((q) => q >= p.load); return i < 0 ? null : xs[i]; };
+    const a = cross(on), b = cross(off);
+    $('c1t').textContent = 'Heat rejected vs vehicle speed';
+    $('c1n').textContent = `Fan on, it carries ${fx(p.load, 1)} kW ${a === null ? 'at no speed up to ' + F('spd', 130, 0) : a === 0 ? 'even standing still' : 'from about ' + F('spd', a, 0)}; fan off, ${b === null ? 'never below ' + F('spd', 130, 0) : 'from about ' + F('spd', b, 0)}. Coolant held at ${F('temp', p.TcIn, 0)} inlet.`;
+    chart($('c1'), { xs: xs.map((v) => conv('spd', v)), series: [{ ys: off, color: '#9aa7b8', name: 'fan off', w: 2, below: true }, { ys: on, color: '#ef2b36', name: 'fan on', area: true }], hline: p.load, hlabel: `heat load ${fx(p.load, 1)} kW`, mark: [conv('spd', p.speed), R.Q / 1000], xl: uname('spd'), yfmt: (v) => fx(v, 1) });
+  } else {
+    const xs = []; for (let v = 0.5; v <= 15.01; v += 0.5) xs.push(v);
+    const q = xs.map((v) => solveRadiator({ ...S, Vface: v, quick: true }).Q / 1000);
+    const i = q.findIndex((x) => x >= p.load);
+    $('c1t').textContent = 'Heat rejected vs face velocity';
+    $('c1n').textContent = i < 0 ? `Never reaches ${fx(p.load, 1)} kW below ${F('vel', 15, 0)} at this inlet temperature.` : `Needs about ${F('vel', xs[i], 1)} through the face to carry ${fx(p.load, 1)} kW.`;
+    chart($('c1'), { xs: xs.map((v) => conv('vel', v)), series: [{ ys: q, color: '#ef2b36', name: 'heat rejected', area: true }], hline: p.load, hlabel: `heat load ${fx(p.load, 1)} kW`, mark: [conv('vel', p.Vface), R.Q / 1000], xl: uname('vel'), yfmt: (v) => fx(v, 1) });
+  }
+  // louver angle sweep
+  const th = []; for (let t = 15; t <= 35; t += 1) th.push(t);
+  const thr = th.map((t) => qAt({ theta: t }));
+  const q0 = R.Q, d0 = R.dPair;
+  const qn = thr.map((r) => r.Q / q0 * 100), dn = thr.map((r) => r.dPair / d0 * 100);
+  const bi = qn.indexOf(Math.max(...qn));
+  $('c2n').textContent = isDrive()
+    ? (th[bi] === th[0] ? `Airflow-limited: shallower louvers win here because every bit of drag costs airflow. ${th[bi]}° gives ${fx(Math.max(...qn) - 100, 1)}% more heat than your ${fx(S.theta, 1)}°.` : `With airflow set by your duct and fan, heat peaks near ${th[bi]}° (${fx(Math.max(...qn) - 100, 1)}% vs your ${fx(S.theta, 1)}°). Steeper louvers add drag, which costs airflow.`)
+    : `At fixed face velocity, steeper louvers keep adding heat transfer, but core ΔP climbs faster. Shown as % of your current design.`;
+  chart($('c2'), { xs: th, series: [{ ys: dn, color: '#3fa7d6', name: 'air ΔP', w: 2, start: true }, { ys: qn, color: '#ef2b36', name: 'heat rejected', start: true }], mark: [S.theta, 100], best: isDrive() ? th[bi] : null, xl: 'louver angle, °', y0: Math.min(...qn, ...dn) * 0.9, yfmt: (v) => fx(v, 0) + '%' });
+  // fin density sweep
+  const fpi = []; for (let k = Math.min(Math.floor(25.4 / S.Fp), Math.max(8, Math.ceil(25.4 / (2.0 * S.Lp)))); k <= Math.max(30, Math.ceil(25.4 / S.Fp)); k += 1) fpi.push(k);
+  const fr = fpi.map((k) => qAt({ Fp: 25.4 / k }));
+  const qf = fr.map((r) => r.Q / q0 * 100), df = fr.map((r) => r.dPair / d0 * 100);
+  const bf = qf.indexOf(Math.max(...qf));
+  $('c3n').textContent = isDrive()
+    ? `More fins add area but choke airflow. Best here is about ${fpi[bf]} fins per inch; you are at ${fx(25.4 / S.Fp, 1)}. Sweep stops where fin pitch passes 2× louver pitch.`
+    : `At fixed face velocity more fins always help heat transfer; watch ΔP, which the fan or duct must supply.`;
+  chart($('c3'), { xs: fpi, series: [{ ys: df, color: '#3fa7d6', name: 'air ΔP', w: 2, start: true }, { ys: qf, color: '#ef2b36', name: 'heat rejected', start: true }], mark: [25.4 / S.Fp, 100], best: isDrive() ? fpi[bf] : null, xl: 'fins per inch', y0: Math.min(...qf, ...df) * 0.9, yfmt: (v) => fx(v, 0) + '%' });
+}
+
+// ---------- ramps ----------
+const mkRamp = (stops) => { const c = stops.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]); const lut = new Uint8Array(256 * 3); for (let i = 0; i < 256; i++) { const t = i / 255 * (c.length - 1), k = Math.min(c.length - 2, Math.floor(t)), f = t - k; for (let j = 0; j < 3; j++) lut[i * 3 + j] = c[k][j] + (c[k + 1][j] - c[k][j]) * f; } return lut; };
+const THERM = mkRamp(['#1c3a9e', '#2994db', '#8ce0d1', '#fae073', '#f58c33', '#db2133']);
+const SPEED = mkRamp(['#05070c', '#0f2552', '#1d5fa8', '#2ea7d4', '#9be6ef', '#ffffff']);
+const VORT = mkRamp(['#5fb3ff', '#2457c5', '#10151d', '#0b0e13', '#10151d', '#c83a2e', '#ff9d6b']);
+const rgb = (lut, t) => { const i = Math.max(0, Math.min(255, t * 255 | 0)) * 3; return `rgb(${lut[i]},${lut[i + 1]},${lut[i + 2]})`; };
+
+// ---------- face map ----------
+const face = $('face'), fctx = face.getContext('2d');
+let faceT = 0, probe = null, faceGeo = null, fcol = 't';
+document.querySelectorAll('[data-fc]').forEach((b) => b.addEventListener('click', () => { fcol = b.dataset.fc; document.querySelectorAll('[data-fc]').forEach((x) => x.setAttribute('aria-pressed', x === b)); }));
+face.addEventListener('pointermove', (e) => { const b = face.getBoundingClientRect(); probe = [e.clientX - b.left, e.clientY - b.top]; });
+face.addEventListener('pointerleave', () => { probe = null; });
+face.addEventListener('pointerdown', (e) => { const b = face.getBoundingClientRect(); probe = [e.clientX - b.left, e.clientY - b.top]; });
+function drawFace(dt) {
+  if (!R) return;
+  const dpr = Math.min(2, devicePixelRatio || 1), W = face.clientWidth, H = face.clientHeight;
+  if (face.width !== Math.round(W * dpr)) { face.width = Math.round(W * dpr); face.height = Math.round(H * dpr); }
+  const c = fctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  const p = P, r = R, tank = Math.max(26, W * 0.07), x0 = tank + 6, x1 = W - tank - 6, top = 26, bot = H - 30;
+  const coreW = x1 - x0, coreH = bot - top;
+  const tubeH = Math.max(5, coreH * p.Th / (r.N * p.Th + r.rows * p.Fl) * 1.6);
+  const finH = (coreH - r.N * tubeH) / r.rows;
+  const tnT = (T) => (T - p.TaIn) / Math.max(0.1, p.TcIn - p.TaIn);
+  // heat flux per unit face area for each cell (air temperature rise x capacity)
+  const cellA = r.Afr / (r.nx * r.N), Cac = r.Ca / (r.nx * r.N);
+  let qmax = 0, qmin = 1e9; for (const row of r.mapA) for (const v of row) { const q = Cac * (v - p.TaIn) / cellA / 1000; qmax = Math.max(qmax, q); qmin = Math.min(qmin, q); }
+  if (qmax - qmin < 1e-6) qmax = qmin + 1;
+  const qOf = (Ta) => Cac * (Ta - p.TaIn) / cellA / 1000;
+  const tn = fcol === 't' ? tnT : (T) => (qOf(T) - qmin) / (qmax - qmin);
+  const tnC = fcol === 't' ? tnT : () => -1;
+  $('fLo').textContent = fcol === 't' ? F('temp', p.TaIn, 0) : fx(qmin, 0) + ' kW/m²';
+  $('fHi').textContent = fcol === 't' ? F('temp', p.TcIn, 0) : fx(qmax, 0) + ' kW/m²';
+  $('fMid').textContent = fcol === 't' ? 'temperature' : 'heat flux through the face';
+  const cw = coreW / r.nx;
+  let y = top;
+  for (let k = 0; k < r.rows; k++) {
+    const a = r.mapA[Math.min(r.N - 1, Math.max(0, k - 1))], b = r.mapA[Math.min(r.N - 1, k)];
+    for (let i = 0; i < r.nx; i++) { c.fillStyle = rgb(THERM, tn((a[i] + b[i]) / 2)); c.fillRect(x0 + i * cw, y, cw + 0.6, finH + 0.5); }
+    // fin hatching
+    c.strokeStyle = 'rgba(11,14,19,.35)'; c.lineWidth = 1; c.beginPath();
+    const step = Math.max(3, coreW / r.nf * 3);
+    for (let x = x0; x < x1; x += step) { c.moveTo(x, y + 1); c.lineTo(x + step / 2, y + finH - 1); c.lineTo(x + step, y + 1); }
+    c.stroke();
+    y += finH;
+    if (k < r.N) {
+      const mc = r.mapC[k];
+      for (let i = 0; i < r.nx; i++) { const v = tnC(mc[i]); c.fillStyle = v < 0 ? '#9aa6b4' : rgb(THERM, v); c.fillRect(x0 + i * cw, y, cw + 0.6, tubeH); }
+      c.fillStyle = 'rgba(255,255,255,.18)'; c.fillRect(x0, y, coreW, 1);
+      // coolant dashes
+      c.fillStyle = 'rgba(255,255,255,.75)';
+      const sp = 22, off = (faceT * 40 * Math.max(0.15, r.Vi / 0.3)) % sp;
+      for (let x = x0 + off; x < x1; x += sp) c.fillRect(x, y + tubeH / 2 - 1, 7, 2);
+      y += tubeH;
+    }
+  }
+  faceGeo = { x0, x1, top, bot };
+  if (probe && probe[0] > x0 && probe[0] < x1 && probe[1] > top && probe[1] < bot) {
+    const fr = (probe[0] - x0) / coreW, ix = Math.min(r.nx - 1, Math.floor(fr * r.nx));
+    const t = Math.min(r.N - 1, Math.max(0, Math.floor((probe[1] - top) / coreH * r.N)));
+    const txt = [`Tube ${t + 1} of ${r.N}, ${fx(fr * 100, 0)}% along`, `Coolant ${F('temp', r.mapC[t][ix], 1)} · air leaving ${F('temp', r.mapA[t][ix], 1)}`, `Heat flux ${fx(qOf(r.mapA[t][ix]), 1)} kW/m² of face`];
+    c.font = '500 13px Inter,sans-serif';
+    const bw = Math.max(...txt.map((s) => c.measureText(s).width)) + 20, bh = 64;
+    let bx = probe[0] + 14, by = probe[1] - bh - 8; if (bx + bw > W - 4) bx = probe[0] - bw - 14; if (by < 2) by = probe[1] + 14;
+    c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.beginPath(); c.arc(probe[0], probe[1], 6, 0, 7); c.stroke();
+    c.fillStyle = 'rgba(11,14,19,.92)'; c.strokeStyle = '#33425a'; c.beginPath(); c.roundRect(bx, by, bw, bh, 8); c.fill(); c.stroke();
+    c.fillStyle = '#e9eef4'; c.textAlign = 'left'; txt.forEach((s, i) => c.fillText(s, bx + 10, by + 20 + i * 18));
+  }
+  // tanks
+  const tankG = (x) => { const g = c.createLinearGradient(x, 0, x + tank, 0); g.addColorStop(0, '#5d6876'); g.addColorStop(.5, '#c9d1da'); g.addColorStop(1, '#4a5462'); return g; };
+  c.fillStyle = tankG(2); c.beginPath(); c.roundRect(2, top - 8, tank, coreH + 16, 6); c.fill();
+  c.fillStyle = tankG(W - tank - 2); c.beginPath(); c.roundRect(W - tank - 2, top - 8, tank, coreH + 16, 6); c.fill();
+  c.font = '600 13px Inter,sans-serif'; c.fillStyle = '#e9eef4'; c.textBaseline = 'alphabetic';
+  c.textAlign = 'left'; c.fillText('In ' + F('temp', p.TcIn, 1), 2, 16);
+  c.textAlign = 'right'; c.fillText('Out ' + F('temp', r.TcOut, 1), W - 2, H - 8);
+  if (W > 560) { c.textAlign = 'center'; c.fillStyle = '#93a1b3'; c.fillText('coolant flows left to right · air flows into the page', W / 2, 16); }
+}
+
+// ---------- louver flow (worker) ----------
+const flowCv = $('flow'), flx = flowCv.getContext('2d');
+const field = document.createElement('canvas'), fdx = field.getContext('2d');
+const trails = document.createElement('canvas'), trx = trails.getContext('2d');
+let snap = null, geo = null, fmode = 'speed', showTr = true, paused = false, stepRate = 0, lastSnap = null, img = null;
+const NTR = 1600; const tr = new Float32Array(NTR * 2);
+const workerSrc = $('lbmsrc').textContent + `
+let sim=null, running=true, timer=null;
+function loop(){ if(!sim||!running){timer=setTimeout(loop,60);return;} const t0=performance.now(); while(performance.now()-t0<22) sim.step();
+ const fe=sim.flowEfficiency(); const ux=sim.ux.slice(), uy=sim.uy.slice(), T=sim.T.slice();
+ postMessage({type:'snap',ux,uy,T,steps:sim.steps,eta:fe.eta,angle:fe.angle,blown:sim.blown,t:performance.now()},[ux.buffer,uy.buffer,T.buffer]); sim.blown=false; timer=setTimeout(loop,4); }
+onmessage=(e)=>{ const m=e.data;
+ if(m.cmd==='build'){ sim=new LouverSim(); sim.build(m.cfg); postMessage({type:'geo',NX:sim.NX,NY:sim.NY,solid:sim.solid,segs:sim.segs,thick:sim.thick,u0:sim.u0,L:sim.L,Fpc:sim.Fpc,xs:sim.xs,finEnd:sim.finEnd,re:sim.re,tau:sim.tau0}); }
+ else if(m.cmd==='re'&&sim){ sim.setRe(m.re); postMessage({type:'re',re:m.re,tau:sim.tau0}); }
+ else if(m.cmd==='run'){ running=m.v; }
+ else if(m.cmd==='reset'&&sim){ sim.reset(); } };
+loop();`;
+let worker = null;
+try { worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' }))); } catch (e) { worker = null; }
+if (!worker) $('flowNote').textContent = 'This browser blocked the background solver, so the live louver simulation is unavailable here.';
+let simKey = '', simRe = 0, buildTimer = null;
+function updateSim() {
+  if (!worker || !R) return;
+  const key = [S.theta, (S.Fp / S.Lp).toFixed(3), (S.df / S.Lp).toFixed(3)].join('|');
+  const re = Math.max(40, Math.min(800, R.ReLp));
+  if (key !== simKey) {
+    simKey = key; clearTimeout(buildTimer);
+    buildTimer = setTimeout(() => { worker.postMessage({ cmd: 'build', cfg: { theta: S.theta, fpr: S.Fp / S.Lp, re, n: 6, lpc: 16, pitches: 4, tr: S.df / S.Lp, pad: 0.1 } }); simRe = re; }, geo ? 220 : 0);
+  } else if (Math.abs(re - simRe) / simRe > 0.02) { simRe = re; worker.postMessage({ cmd: 're', re }); }
+  $('sRe').textContent = fx(R.ReLp, 0) + (R.ReLp > 800 ? ' (sim 800)' : R.ReLp < 40 ? ' (sim 40)' : '');
+}
+if (worker) worker.onerror = (e) => { console.error('worker', e.message, e.lineno); };
+if (worker) worker.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === 'geo') {
+    geo = m; snap = null;
+    field.width = m.NX; field.height = m.NY; img = fdx.createImageData(m.NX, m.NY);
+    for (let i = 0; i < NTR; i++) respawn(i, true);
+    trx.clearRect(0, 0, trails.width, trails.height);
+  } else if (m.type === 'snap') {
+    if (lastSnap) { const ds = m.steps - lastSnap.steps, dtt = (m.t - lastSnap.t) / 1000; if (ds > 0 && dtt > 0) stepRate = stepRate ? stepRate * 0.8 + 0.2 * ds / dtt : ds / dtt; }
+    lastSnap = { steps: m.steps, t: m.t }; snap = m;
+    $('sAng').textContent = fx(m.angle, 1) + '°';
+    $('sEta').textContent = fx(m.eta * 100, 0) + '%';
+    const reg = m.eta < 0.4 ? ['Duct-directed', '#3a2a12', '#f3cf9a'] : m.eta < 0.65 ? ['Transitional', '#132235', '#8fc8ff'] : ['Louver-directed', '#0f2a1f', '#8fe0bd'];
+    const el = $('sReg'); el.textContent = reg[0]; el.style.background = reg[1]; el.style.color = reg[2];
+    $('sSteps').textContent = fx(stepRate, 0) + ' steps/s';
+  }
+};
+function respawn(i, any) { if (!geo) return; tr[i * 2] = any ? Math.random() * geo.NX : 1 + Math.random() * 3; tr[i * 2 + 1] = Math.random() * geo.NY; }
+function sampleV(x, y) {
+  const NX = geo.NX, NY = geo.NY, ux = snap.ux, uy = snap.uy;
+  if (x < 0) x = 0; if (x > NX - 1.001) x = NX - 1.001; y = ((y % NY) + NY) % NY;
+  const x0 = x | 0, y0 = y | 0, y1 = (y0 + 1) % NY, a = x - x0, b = y - y0;
+  const i00 = y0 * NX + x0, i10 = i00 + 1, i01 = y1 * NX + x0, i11 = i01 + 1;
+  return [(ux[i00] * (1 - a) + ux[i10] * a) * (1 - b) + (ux[i01] * (1 - a) + ux[i11] * a) * b, (uy[i00] * (1 - a) + uy[i10] * a) * (1 - b) + (uy[i01] * (1 - a) + uy[i11] * a) * b];
+}
+let panX = null;
+(() => { let d = null; flowCv.addEventListener('pointerdown', (e) => { d = e.clientX; }); addEventListener('pointerup', () => { d = null; }); flowCv.addEventListener('pointermove', (e) => { if (d === null || panX === null) return; panX -= (e.clientX - d) / flowView.s; d = e.clientX; }); })();
+const flowView = { s: 1, ox: 0 };
+function drawFlow(dt) {
+  const wrap = $('flowWrap'), dpr = Math.min(2, devicePixelRatio || 1);
+  const W = wrap.clientWidth;
+  if (!geo || !snap) { if (flowCv.width !== Math.round(W * dpr)) { flowCv.width = Math.round(W * dpr); flowCv.height = Math.round(240 * dpr); flowCv.style.height = '240px'; } flx.fillStyle = '#06080b'; flx.fillRect(0, 0, flowCv.width, flowCv.height); flx.fillStyle = '#93a1b3'; flx.font = `${14 * dpr}px Inter`; flx.fillText(worker ? 'Starting the solver…' : 'Solver unavailable', 20 * dpr, 40 * dpr); return; }
+  const NX = geo.NX, NY = geo.NY;
+  let s = W / NX, Hh = NY * s;
+  const minH = W < 700 ? 220 : 240;
+  if (Hh < minH) { s = minH / NY; Hh = minH; }
+  const viewW = W / s;
+  if (viewW >= NX) panX = null; else { if (panX === null) panX = geo.xs - geo.L * 1.5; panX = Math.max(0, Math.min(NX - viewW, panX)); }
+  const ox = panX || 0; flowView.s = s; flowView.ox = ox;
+  if (flowCv.width !== Math.round(W * dpr) || flowCv.height !== Math.round(Hh * dpr)) {
+    flowCv.width = Math.round(W * dpr); flowCv.height = Math.round(Hh * dpr); flowCv.style.height = Hh + 'px';
+    trails.width = flowCv.width; trails.height = flowCv.height;
+  }
+  // field image
+  const d = img.data, ux = snap.ux, uy = snap.uy, T = snap.T, sol = geo.solid, uref = geo.u0 / (1 - geo.thick / geo.Fpc);
+  for (let y = 0; y < NY; y++) {
+    const yu = (y + 1) % NY, yd = (y - 1 + NY) % NY;
+    for (let x = 0; x < NX; x++) {
+      const i = y * NX + x, o = ((NY - 1 - y) * NX + x) * 4;
+      let lut = SPEED, t;
+      if (sol[i]) { d[o] = 26; d[o + 1] = 31; d[o + 2] = 39; d[o + 3] = 255; continue; }
+      if (fmode === 'speed') t = Math.hypot(ux[i], uy[i]) / (uref * 1.9);
+      else if (fmode === 'temp') { lut = THERM; t = T[i] * 0.92; }
+      else { lut = VORT; const w = x > 0 && x < NX - 1 ? (uy[i + 1] - uy[i - 1]) - (ux[yu * NX + x] - ux[yd * NX + x]) : 0; t = 0.5 - w / (uref * 2.4); }
+      const k = Math.max(0, Math.min(255, t * 255 | 0)) * 3;
+      d[o] = lut[k]; d[o + 1] = lut[k + 1]; d[o + 2] = lut[k + 2]; d[o + 3] = 255;
+    }
+  }
+  fdx.putImageData(img, 0, 0);
+  const c = flx; c.setTransform(1, 0, 0, 1, 0, 0);
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  c.drawImage(field, -ox * s * dpr, 0, NX * s * dpr, NY * s * dpr);
+  // streaklines
+  if (showTr) {
+    trx.globalCompositeOperation = 'destination-out'; trx.fillStyle = 'rgba(0,0,0,.09)'; trx.fillRect(0, 0, trails.width, trails.height);
+    trx.globalCompositeOperation = 'source-over';
+    if (!paused) {
+      const adv = Math.min(4, stepRate * dt);
+      trx.strokeStyle = fmode === 'speed' ? 'rgba(255,214,140,.55)' : 'rgba(255,255,255,.55)'; trx.lineWidth = 1.1 * dpr; trx.beginPath();
+      for (let i = 0; i < NTR; i++) {
+        let x = tr[i * 2], y = tr[i * 2 + 1];
+        const v = sampleV(x, y); const nx = x + v[0] * adv * 1.0, ny = y + v[1] * adv * 1.0;
+        const xi = Math.min(NX - 1, Math.max(0, nx | 0)), yi = ((ny | 0) % NY + NY) % NY;
+        if (nx > NX - 2 || sol[yi * NX + xi]) { respawn(i, false); continue; }
+        const X0 = (x - ox) * s * dpr, Y0 = (NY - y) * s * dpr, X1 = (nx - ox) * s * dpr, Y1 = (NY - ny) * s * dpr;
+        if (Math.abs(Y1 - Y0) < NY * s * dpr * 0.5) { trx.moveTo(X0, Y0); trx.lineTo(X1, Y1); }
+        tr[i * 2] = nx; tr[i * 2 + 1] = ((ny % NY) + NY) % NY;
+      }
+      trx.stroke();
+    }
+    c.globalCompositeOperation = 'lighter'; c.drawImage(trails, 0, 0); c.globalCompositeOperation = 'source-over';
+  }
+  // louvers as crisp metal slats
+  const th = Math.max(2.2, geo.thick * s) * dpr;
+  for (const sg of geo.segs) {
+    const X0 = (sg.x0 - ox) * s * dpr, Y0 = (NY - sg.y0) * s * dpr, X1 = (sg.x1 - ox) * s * dpr, Y1 = (NY - sg.y1) * s * dpr;
+    if (Math.max(X0, X1) < -10 || Math.min(X0, X1) > flowCv.width + 10) continue;
+    const g = c.createLinearGradient(X0, Y0 - th, X0, Y0 + th); g.addColorStop(0, '#f2f5f8'); g.addColorStop(0.5, '#9aa6b4'); g.addColorStop(1, '#4d5866');
+    c.strokeStyle = g; c.lineWidth = th; c.lineCap = 'round'; c.beginPath(); c.moveTo(X0, Y0); c.lineTo(X1, Y1); c.stroke();
+  }
+  // labels
+  c.font = `600 ${13 * dpr}px Inter,sans-serif`; c.fillStyle = 'rgba(233,238,244,.9)'; c.textAlign = 'left';
+  const lab = (txt, x, y) => { const X = (x - ox) * s * dpr; if (X > 0 && X < flowCv.width - 90 * dpr) { c.lineWidth = 4 * dpr; c.strokeStyle = 'rgba(6,8,11,.8)'; c.strokeText(txt, X, y); c.fillText(txt, X, y); } };
+  lab(ox > 0 ? '← drag to pan →' : 'air in →', ox + 3, 20 * dpr);
+  lab('bank 1', geo.xs + geo.L * 1.4, 20 * dpr);
+  lab('turnaround', geo.xs + geo.L * 7.1, 20 * dpr);
+  lab('bank 2', geo.xs + geo.L * 9.2, 20 * dpr);
+  lab('wake →', geo.finEnd + geo.L * 1.5, 20 * dpr);
+}
+const LEG = { speed: 'Speed: dark is still air, white is about twice the core velocity', temp: 'Temperature: blue is incoming air, red is air at fin-surface temperature', vort: 'Vorticity: red spins clockwise, blue counter-clockwise; shed vortices trail the fins' };
+$('fLeg').textContent = LEG.speed;
+document.querySelectorAll('[data-fm]').forEach((b) => b.addEventListener('click', () => { fmode = b.dataset.fm; $('fLeg').textContent = LEG[fmode]; document.querySelectorAll('[data-fm]').forEach((x) => x.setAttribute('aria-pressed', x === b)); }));
+$('fTr').onclick = () => { showTr = !showTr; $('fTr').setAttribute('aria-pressed', showTr); trx.clearRect(0, 0, trails.width, trails.height); };
+$('fPause').onclick = () => { paused = !paused; $('fPause').setAttribute('aria-pressed', paused); worker && worker.postMessage({ cmd: 'run', v: !paused }); };
+$('fReset').onclick = () => { worker && worker.postMessage({ cmd: 'reset' }); trx.clearRect(0, 0, trails.width, trails.height); };
+
+// ---------- change pipeline ----------
+let chartTimer = null, pending = false;
+function changed(id, srcRow) {
+  if (id === 'mode' || id === 'fan' || id === 'preset' || id === 'units') { renderCtl(); renderMini(); }
+  else for (const el of rows[id] || []) el.sync();
+  if (id === 'Fp') for (const el of rows.Fp) el.sync();
+  if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; solve(); show(); updateSim(); syncAll(); }); }
+  clearTimeout(chartTimer); chartTimer = setTimeout(charts, 140);
+  save();
+}
+$('reset').onclick = () => { S = { ...DEF }; changed('preset'); };
+$('copy').onclick = async () => {
+  const p = P, r = R;
+  const t = `Radiator Flow Lab\nCore ${F('len', p.W, 0, 2)} × ${F('len', p.H, 1, 2)} × ${F('len', p.D, 1, 2)}, ${fx(25.4 / p.Fp, 1)} FPI, louvers ${fx(p.theta, 1)}°\n`
+    + (isDrive() ? `${F('spd', p.speed, 0)}, fan ${p.fan ? 'on' : 'off'}, duct Cp ${fx(p.Cp, 2)}\n` : '')
+    + `Air ${F('temp', p.TaIn, 1)} at ${F('vel', p.Vface, 2)}; coolant ${F('temp', p.TcIn, 1)} at ${F('flowL', p.flow, 1, 2)}\n`
+    + `Heat rejected ${fx(r.Q / 1000, 2)} kW · coolant out ${F('temp', r.TcOut, 1)} · air ΔP ${F('press', r.dPair, 0, 2)} · ε ${fx(r.eps, 2)}`;
+  try { await navigator.clipboard.writeText(t); $('copy').textContent = 'Copied'; } catch (e) { $('copy').textContent = 'Copy blocked'; }
+  setTimeout(() => { $('copy').textContent = 'Copy summary'; }, 1600);
+};
+
+// ---------- loop ----------
+const vis = { view: true, flow: true, face: true };
+const io = new IntersectionObserver((es) => { for (const e of es) vis[e.target.dataset.v] = e.isIntersecting; });
+$('view').dataset.v = 'view'; $('flowWrap').dataset.v = 'flow'; face.dataset.v = 'face';
+io.observe($('view')); io.observe($('flowWrap')); io.observe(face);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reduce) { R3.autoSpin = false; $('vSpin').setAttribute('aria-pressed', 'false'); }
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (vis.view && R3.ok) R3.frame(reduce ? 0 : dt);
+  if (vis.flow) drawFlow(dt);
+  if (vis.face) { faceT += reduce ? 0 : dt; drawFace(dt); }
+  requestAnimationFrame(tick);
+}
+buildTabs(); renderCtl(); renderMini();
+solve(); show(); updateSim(); syncAll(); charts();
+requestAnimationFrame(tick);
+}
+</script>
+</body>
+</html>
